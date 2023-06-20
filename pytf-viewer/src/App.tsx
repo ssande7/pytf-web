@@ -3,6 +3,10 @@ import { Particles, Visualizer } from 'omovi'
 import { Vector3 } from 'three'
 import './App.css';
 
+const TimerSymbol = <>&#x23F1;</>;
+const SaveSymbol = <>&#x1F5AA;</>;
+const ResetCameraSymbol = <>&#x1F441;</>;
+
 const Composition: React.FC = () => {
   const dummy_list = ['foo', 'bar', 'baz'].map((value) => { return <li> {value} </li>})
   return (
@@ -134,27 +138,6 @@ const Vis: React.FC<VisProps> = ({ numParticles }) => {
 
   useEffect(restartAnimation, [particles.length, fps])
 
-  // Adjustable animation speed
-  interface FPSLimits {
-    min: number;
-    max: number;
-  }
-  const FpsSlider: React.FC<FPSLimits> = ({min, max}) => {
-    // &#x1F3CE; = 🏎
-    return (
-      <div className="MD-vis-controls" style={{width: '12vh', fontSize: '2vh'}}>
-        <p style={{fontSize: '2vh', width: '4vh', verticalAlign: 'middle'}}>&#x1F3CE;</p>
-        <input type="range" min={min} max={max} style={{flexGrow: 8, verticalAlign: 'middle'}} defaultValue={fps}
-          onChange={(e) => {
-            if (e.target.value) {
-              setFps(Number(e.target.value))
-            }
-          }}
-        />
-      </div>
-    );
-  }
-
   function resetCamera() {
     if (vis && camTargetInit && camPositionInit) {
       vis.setCameraTarget(camTargetInit)
@@ -165,10 +148,12 @@ const Vis: React.FC<VisProps> = ({ numParticles }) => {
   return (
     <>
       <div id="canvas-container" style={{ height: '100%', width: '100%'}}>
-        <div style={{ height: '77vh', width: '100%', border: 'medium solid grey', backgroundColor: 'black'}} ref={domElement}>
+        <div style={{ height: '70vh', width: '100%', border: 'medium solid grey', backgroundColor: 'black'}} ref={domElement}>
         </div>
-        <div id="controls" className="MD-vis-controls" style={{width: '100%'}}>
-          <button className={paused ? "PlayButton" : "PauseButton"} onClick={toggleAnimation} />
+        <div id="controls" className="MD-vis-controls" style={{width: '100%', padding: 0}}>
+          <div style={{padding: '0.2vh', display: 'flex', flexDirection: 'column', alignContent: 'middle', height: '3vh'}}>
+            <button className={paused ? "PlayButton" : "PauseButton"} onClick={toggleAnimation} />
+          </div>
           <input type="range" min="0" max={particles.length-1} defaultValue='0' ref={animationSlider}
             style={{verticalAlign: 'middle', flexGrow: 8}}
             onInput={(e) => {
@@ -179,10 +164,27 @@ const Vis: React.FC<VisProps> = ({ numParticles }) => {
               if (!paused) {startAnimation()}
             }}
           />
-          &emsp;
-          <FpsSlider min={1} max={30} />
-          <button className="App-button" onClick={resetCamera} style={{width: '12vh'}}>
-            Reset Camera
+          <div className="HorizontalSpacer" />
+          <div className="MD-vis-controls" style={{flexGrow: 1, maxWidth: '15%', fontSize: '2vh'}}>
+            <div title="Animation speed" style={{cursor: 'default', fontSize: '2.5vh', flexGrow: 1, display: 'flex', flexDirection: 'column', alignContent: 'middle', height: '3vh'}}>
+              {TimerSymbol}
+            </div>
+            <div className="HorizontalSpacer" style={{minWidth: '0.5vh'}}/>
+            <input type="range" min={1} max={30} style={{flexGrow: 4, maxWidth: '80%', verticalAlign: 'middle'}} defaultValue={fps}
+              onChange={(e) => {
+                if (e.target.value) {
+                  setFps(Number(e.target.value))
+                }
+              }}
+            />
+          </div>
+          <div className="HorizontalSpacer" />
+          <button className="App-button" style={{fontSize: '3vh'}} onClick={resetCamera} title="Reset camera to initial position">
+            {ResetCameraSymbol}
+          </button>
+          <div className="HorizontalSpacer" style={{maxWidth: '1vh'}}/>
+          <button className="App-button" style={{fontSize: '3vh'}} title="Save deposition movie">
+            {SaveSymbol}
           </button>
         </div>
       </div>
@@ -194,16 +196,14 @@ const App: React.FC = () => {
   return (
     <>
       <div className="App">
-        <div className="App-header">
-          <h1>Vacuum Deposition</h1>
-        </div>
         <div className="MD-container">
           <div className="MD-params" id="input-container">
+            <div className="App-header">
+              <h1>Vacuum Deposition</h1>
+            </div>
             <div style={{display: 'grid', alignItems: 'left'}}>
               <Composition />
               <Protocol />
-              <div className="PlayButton"></div>
-              <div className="PauseButton"></div>
             </div>
           </div>
           <div className="MD-vis" >

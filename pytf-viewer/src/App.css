@@ -1,5 +1,8 @@
 .App {
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
 }
 
 .App-logo {
@@ -27,31 +30,30 @@
 .MD-container {
   width: 100%;
   background-color: #282c34;
-  float: left;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
 }
 
 .MD-vis {
   display: flex;
-  padding-bottom: 2vh;
+  width: 60%;
+  padding: 2vh;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  float: left;
-  width: 60%;
+  flex-grow: 8;
 }
 
 .MD-params {
   padding-left: 2vh;
   min-height: 0vh;
-  align-items: left;
-  justify-content: left;
-  align-content: left;
+  align-items: flex-start;
   text-align: left;
-  flex-direction: row;
+  display: flex;
+  flex-direction: column;
   color: white;
-  float: left;
-  clear: left;
-  width: 37%;
+  flex-grow: 1;
 }
 
 .MD-param-group {
@@ -63,24 +65,29 @@
   justify-content: space-between;
   color: white;
   align-content: center;
-  align-items: stretch;
+  align-items: center;
   vertical-align: middle;
 }
 
+.HorizontalSpacer {
+  min-width: 1vh;
+  background-color: transparent;
+  flex-grow: 1;
+}
+
 .App-button {
-  min-height: 5vh;
+  min-height: 3vh;
   vertical-align: middle;
   text-align: center;
-  background-color: #282c34;
+  background-color: transparent;
   border: none;
   color: white;
   padding: 0.2vh;
   display: inline-block;
   transition-duration: 0.2s;
+  cursor: pointer;
 }
 .App-button:hover {
-  border: thin;
-  border-color: #0b7762;
   color: #0b7762;
 }
 
@@ -89,6 +96,7 @@
   background: transparent;
   box-sizing: border-box;
   vertical-align: middle;
+  cursor: pointer;
 
   width: 3vh;
   height: 3vh;
@@ -105,6 +113,7 @@
   background: transparent;
   box-sizing: border-box;
   vertical-align: middle;
+  cursor: pointer;
 
   width: 3vh;
   height: 3vh;
