@@ -15,13 +15,112 @@
 
 .App-header {
   background-color: #282c34;
-  min-height: 100vh;
+  min-height: 10vh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   font-size: calc(10px + 2vmin);
   color: white;
+}
+
+.MD-container {
+  width: 100%;
+  background-color: #282c34;
+  float: left;
+}
+
+.MD-vis {
+  display: flex;
+  padding-bottom: 2vh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  float: left;
+  width: 60%;
+}
+
+.MD-params {
+  padding-left: 2vh;
+  min-height: 0vh;
+  align-items: left;
+  justify-content: left;
+  align-content: left;
+  text-align: left;
+  flex-direction: row;
+  color: white;
+  float: left;
+  clear: left;
+  width: 37%;
+}
+
+.MD-param-group {
+  display: grid;
+}
+
+.MD-vis-controls {
+  display: inline flex;
+  justify-content: space-between;
+  color: white;
+  align-content: center;
+  align-items: stretch;
+  vertical-align: middle;
+}
+
+.App-button {
+  min-height: 5vh;
+  vertical-align: middle;
+  text-align: center;
+  background-color: #282c34;
+  border: none;
+  color: white;
+  padding: 0.2vh;
+  display: inline-block;
+  transition-duration: 0.2s;
+}
+.App-button:hover {
+  border: thin;
+  border-color: #0b7762;
+  color: #0b7762;
+}
+
+.PlayButton {
+  border: 0;
+  background: transparent;
+  box-sizing: border-box;
+  vertical-align: middle;
+
+  width: 3vh;
+  height: 3vh;
+
+  border-color: transparent transparent transparent white;
+  transition: 100ms all ease;
+
+  border-style: solid;
+  border-width: 1.5vh 0 1.5vh 2.4vh;
+}
+
+.PauseButton {
+  border: 0;
+  background: transparent;
+  box-sizing: border-box;
+  vertical-align: middle;
+
+  width: 3vh;
+  height: 3vh;
+
+  border-color: transparent transparent transparent white;
+  transition: 100ms all ease;
+
+  border-style: double;
+  border-width: 0 0 0 2.4vh;
+}
+
+.PlayButton:hover {
+  border-color: transparent transparent transparent #0b7762;
+}
+.PauseButton:hover {
+  border-color: transparent transparent transparent #0b7762;
 }
 
 .App-link {
