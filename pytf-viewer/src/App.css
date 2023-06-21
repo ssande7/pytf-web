@@ -91,6 +91,7 @@
   color: #0b7762;
 }
 
+/* based on: https://css-tricks.com/making-pure-css-playpause-button/ */
 .PlayButton {
   border: 0;
   background: transparent;
@@ -103,32 +104,19 @@
 
   border-color: transparent transparent transparent white;
   transition: 100ms all ease;
+}
 
+.PlayButton.play {
   border-style: solid;
   border-width: 1.5vh 0 1.5vh 2.4vh;
 }
 
-.PauseButton {
-  border: 0;
-  background: transparent;
-  box-sizing: border-box;
-  vertical-align: middle;
-  cursor: pointer;
-
-  width: 3vh;
-  height: 3vh;
-
-  border-color: transparent transparent transparent white;
-  transition: 100ms all ease;
-
+.PlayButton.pause {
   border-style: double;
   border-width: 0 0 0 2.4vh;
 }
 
 .PlayButton:hover {
-  border-color: transparent transparent transparent #0b7762;
-}
-.PauseButton:hover {
   border-color: transparent transparent transparent #0b7762;
 }
 

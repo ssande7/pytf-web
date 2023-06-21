@@ -152,7 +152,7 @@ const Vis: React.FC<VisProps> = ({ numParticles }) => {
         </div>
         <div id="controls" className="MD-vis-controls" style={{width: '100%', padding: 0}}>
           <div style={{padding: '0.2vh', display: 'flex', flexDirection: 'column', alignContent: 'middle', height: '3vh'}}>
-            <button className={paused ? "PlayButton" : "PauseButton"} onClick={toggleAnimation} />
+            <button className={paused ? "PlayButton play" : "PlayButton pause"} onClick={toggleAnimation} />
           </div>
           <input type="range" min="0" max={particles.length-1} defaultValue='0' ref={animationSlider}
             style={{verticalAlign: 'middle', flexGrow: 8}}
