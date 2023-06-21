@@ -48,7 +48,7 @@ const Login: React.FC<ILogin> = ({ setToken }) => {
             </label>
             <label>
               <p>Password</p>
-              <input type="text" onChange={e => setPassword(e.target.value)} />
+              <input type="password" onChange={e => setPassword(e.target.value)} />
             </label>
             <div>
               <button type="submit">Login</button>

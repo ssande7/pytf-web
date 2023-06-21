@@ -33,8 +33,9 @@ async fn login(request: HttpRequest, credentials: web::Json<UserCredentials>) ->
     // TODO: authentication happens here
     match Identity::login(&request.extensions(), credentials.username.clone()) {
         Ok(user) => {
-            println!("Logged in");
-            HttpResponse::Ok().json(LoginToken { token: user.id().unwrap().clone() })
+            let user_id = user.id().unwrap();
+            println!("Logged in ({user_id})");
+            HttpResponse::Ok().json(LoginToken { token: user_id })
         }
         Err(e) => HttpResponse::ExpectationFailed().body(format!("{e}")),
     }
@@ -42,7 +43,8 @@ async fn login(request: HttpRequest, credentials: web::Json<UserCredentials>) ->
 
 #[post("/logout")]
 async fn logout(user: Identity) -> impl Responder {
-    println!("Logged out");
+    let user_id = user.id().unwrap();
+    println!("Logged out ({user_id})");
     user.logout();
     HttpResponse::Ok()
 }

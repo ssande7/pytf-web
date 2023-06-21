@@ -18,6 +18,7 @@ const App: React.FC = () => {
         }).then(data => data.json());
         setToken(JSON.stringify(cached));
       } catch (_) {
+        // Can add setCheckedIdentity here and make default return the loading screen
       }
     }
     if (!token) {
