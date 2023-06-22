@@ -20,8 +20,11 @@ async fn index() -> impl Responder {
 
 #[post("/login")]
 async fn login(request: HttpRequest, credentials: web::Json<UserCredentials>) -> impl Responder {
-
-    if !authentication::USER_DB.validate_user(&credentials) {
+    if !authentication::USER_DB
+        .get()
+        .unwrap()
+        .validate_user(&credentials)
+    {
         return HttpResponse::Unauthorized().body("Incorrect username or password.");
     }
 
@@ -52,6 +55,9 @@ async fn user_token(user: Identity) -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    // Load user database
+    let _ = authentication::USER_DB.set(UserDB::from_cli_or_default(std::env::args()));
+
     let address = "127.0.0.1";
     let port = 8080;
     let redis_port = 6379;
@@ -61,8 +67,6 @@ async fn main() -> std::io::Result<()> {
     let redis_store = RedisSessionStore::new(redis_address)
         .await
         .expect("Could not connect to redis-server");
-
-    let _ = authentication::USER_DB;
 
     HttpServer::new(move || {
         let cors = Cors::default()

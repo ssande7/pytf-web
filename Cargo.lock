@@ -1300,7 +1300,6 @@ dependencies = [
  "actix-session",
  "actix-web",
  "argon2",
- "lazy_static",
  "serde",
  "serde_json",
 ]

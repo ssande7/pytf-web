@@ -1,21 +1,54 @@
+use argon2::{
+    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    Argon2,
+};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    env,
-    io::{self, BufRead}, fs
+    env::Args,
+    fs,
+    io::{self, BufRead},
+    sync::OnceLock,
 };
-use serde::{Serialize, Deserialize};
-use argon2::{
-    Argon2,
-    password_hash::{
-        rand_core::OsRng,
-        PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
-    },
-};
-use lazy_static::lazy_static;
 
-lazy_static! {
-    pub(crate) static ref USER_DB: UserDB = {
-        let mut args = env::args().into_iter();
+pub(crate) static USER_DB: OnceLock<UserDB> = OnceLock::new();
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoginToken {
+    token: String,
+}
+impl From<String> for LoginToken {
+    fn from(token: String) -> Self {
+        Self { token }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct UserCredentials {
+    username: String,
+    password: String,
+}
+
+impl UserCredentials {
+    pub fn get_id(&self) -> String {
+        self.username.clone()
+    }
+
+    fn password_hash(&self) -> String {
+        let argon2 = Argon2::default();
+        let salt = SaltString::generate(&mut OsRng);
+        argon2
+            .hash_password(self.password.as_str().as_bytes(), &salt)
+            .expect("Error hashing password")
+            .to_string()
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct UserDB(HashMap<String, String>);
+
+impl UserDB {
+    pub fn from_cli_or_default(mut args: Args) -> Self {
         while let Some(arg) = args.next() {
             if arg == "--users" || arg == "-u" {
                 let Some(fname) = args.next() else {
@@ -43,58 +76,27 @@ lazy_static! {
             }
         }
         Default::default()
-    };
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LoginToken {
-    token: String,
-}
-impl From<String> for LoginToken {
-    fn from(token: String) -> Self {
-        Self { token }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct UserCredentials {
-    username: String,
-    password: String,
-}
-
-impl UserCredentials {
-    pub fn get_id(&self) -> String {
-        self.username.clone()
     }
 
-    fn password_hash(&self) -> String {
-        let argon2 = Argon2::default();
-        let salt = SaltString::generate(&mut OsRng);
-        argon2.hash_password(
-                self.password.as_str().as_bytes(),
-                &salt
-            )
-            .expect("Error hashing password")
-            .to_string()
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct UserDB(HashMap<String,String>);
-
-impl UserDB {
     /// Read a comma separated list
     pub fn from_csv(file: fs::File) -> io::Result<Self> {
         let mut fid = io::BufReader::new(file);
         let mut line = "".to_string();
         let mut idx = 0;
         let mut db = Self::default();
-        while {line.clear(); idx += 1; fid.read_line(&mut line)? > 0} {
+        while {
+            line.clear();
+            idx += 1;
+            fid.read_line(&mut line)? > 0
+        } {
             // line contains trailing \n, so ignore that.
             let Some((username, password)) = line[..(line.len()-1)].split_once(",") else {
                 return Err(io::Error::new(io::ErrorKind::InvalidData, format!("Missing ',' on line {idx}")));
             };
-            db.create_user(UserCredentials { username: username.into(), password: password.into() });
+            db.create_user(UserCredentials {
+                username: username.into(),
+                password: password.into(),
+            });
         }
         Ok(db)
     }
@@ -107,9 +109,14 @@ impl UserDB {
     }
 
     pub fn validate_user(&self, user: &UserCredentials) -> bool {
-        let hash = if let Some(hash) = self.0.get(&user.username) { hash } else { return false };
+        let hash = if let Some(hash) = self.0.get(&user.username) {
+            hash
+        } else {
+            return false;
+        };
         let parsed_hash = PasswordHash::new(&hash).unwrap();
-        Argon2::default().verify_password(user.password.as_str().as_bytes(), &parsed_hash).is_ok()
+        Argon2::default()
+            .verify_password(user.password.as_str().as_bytes(), &parsed_hash)
+            .is_ok()
     }
 }
-
