@@ -3,16 +3,6 @@ import '../App.css';
 
 
 
-async function login(credentials: any) {
-    return fetch("/login", {
-      method: "post",
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(credentials)
-    }).then(data => data.json());
-}
-
 export async function logout(token: any) {
     return fetch("/logout", {
       method: "post",
@@ -29,11 +19,31 @@ interface ILogin {
 const Login: React.FC<ILogin> = ({ setToken }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [loginFailed, setLoginFailed] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
+    async function login(credentials: any) {
+        return fetch("/login", {
+          method: "post",
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(credentials)
+        }).then(data => {
+          if (data.ok) {
+            setLoginFailed(false);
+            return data.json();
+          }
+          setLoginFailed(true);
+          return null
+        });
+    }
+
     e.preventDefault();
     const token = await login({username, password});
-    setToken(JSON.stringify(token));
+    if (token) {
+      setToken(JSON.stringify(token));
+    }
   }
 
   return (
@@ -50,6 +60,9 @@ const Login: React.FC<ILogin> = ({ setToken }) => {
               <p>Password</p>
               <input type="password" onChange={e => setPassword(e.target.value)} />
             </label>
+            <div>
+              {loginFailed ? "Incorrect username or password!" : ""}
+            </div>
             <div>
               <button type="submit">Login</button>
             </div>

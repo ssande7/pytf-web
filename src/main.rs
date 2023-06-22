@@ -6,7 +6,9 @@ use actix_web::{
     cookie::Key, http, post, web, App, HttpMessage, HttpRequest, HttpResponse, HttpServer,
     Responder,
 };
-use serde::{Serialize, Deserialize};
+
+mod authentication;
+use authentication::*;
 
 const FRONTEND_ROOT: &'static str = "./pytf-viewer/build";
 
@@ -16,26 +18,18 @@ async fn index() -> impl Responder {
         .expect("Could not find index.html! Make sure pytf-viewer has been built (npm run build)")
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct LoginToken {
-    token: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct UserCredentials {
-    username: String,
-    // TODO: should this be received as a hashed password?
-    password: String,
-}
-
 #[post("/login")]
 async fn login(request: HttpRequest, credentials: web::Json<UserCredentials>) -> impl Responder {
-    // TODO: authentication happens here
-    match Identity::login(&request.extensions(), credentials.username.clone()) {
+
+    if !authentication::USER_DB.validate_user(&credentials) {
+        return HttpResponse::Unauthorized().body("Incorrect username or password.");
+    }
+
+    match Identity::login(&request.extensions(), credentials.get_id()) {
         Ok(user) => {
             let user_id = user.id().unwrap();
             println!("Logged in ({user_id})");
-            HttpResponse::Ok().json(LoginToken { token: user_id })
+            HttpResponse::Ok().json(LoginToken::from(user_id))
         }
         Err(e) => HttpResponse::ExpectationFailed().body(format!("{e}")),
     }
@@ -51,8 +45,9 @@ async fn logout(user: Identity) -> impl Responder {
 
 #[post("/user-token")]
 async fn user_token(user: Identity) -> impl Responder {
-    println!("Sending cached token ({})", user.id().unwrap());
-    HttpResponse::Ok().json(LoginToken { token: user.id().unwrap() })
+    let user_id = user.id().unwrap();
+    println!("Sending cached token ({})", user_id);
+    HttpResponse::Ok().json(LoginToken::from(user_id))
 }
 
 #[actix_web::main]
@@ -66,6 +61,8 @@ async fn main() -> std::io::Result<()> {
     let redis_store = RedisSessionStore::new(redis_address)
         .await
         .expect("Could not connect to redis-server");
+
+    let _ = authentication::USER_DB;
 
     HttpServer::new(move || {
         let cors = Cors::default()

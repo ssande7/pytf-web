@@ -209,7 +209,6 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
             <div style={{display: 'grid', alignItems: 'left'}}>
               <Composition />
               <Protocol />
-              <p>Token: {token}</p>
             </div>
           </div>
           <div className="MD-vis" >
@@ -217,12 +216,12 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
           </div>
         </div>
         <div style={{display: 'flex', flexDirection: 'row-reverse'}}>
-          <button className="App-button" onClick={() => {
+          <button className="App-button" style={{paddingLeft: '0.5vh'}} onClick={() => {
               logout({ token });
               setToken(null);
             }}
           >
-            Sign Out
+            Sign Out ({JSON.parse(token).token})
           </button>
         </div>
       </div>
