@@ -51,10 +51,12 @@ impl PytfRunner {
 
             // Perform the next cycle
             if let Some(pytf) = &mut self.pytf {
-                if let Err(e) = pytf.cycle() {
+                let result =  pytf.cycle();
+                if let Err(e) = &result {
                     eprintln!("Error while performing deposition cycle: {e}");
                 }
-                if pytf.run_id() >= pytf.final_run_id() ||
+                // TODO: better reporting here for failed vs stopped vs finished.
+                if result.is_err() || pytf.run_id() >= pytf.final_run_id() ||
                     self.stop.load(Ordering::Acquire)
                 {
                     self.stop.store(false, Ordering::Release);

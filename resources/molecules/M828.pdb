@@ -1,0 +1,23 @@
+HEADER    UNCLASSIFIED                            01-Nov-22
+TITLE     ALL ATOM STRUCTURE FOR MOLECULE UNK                                   
+AUTHOR    AUTOMATED TOPOLOGY BUILDER (ATB) REVISION 2022-10-31 14:18:01
+AUTHOR   2  https://atb.uq.edu.au
+HETATM    1   H5 M828    0      -1.911  -0.265  -0.329  1.00  0.00           H
+HETATM    2   O1 M828    0      -1.096   0.260  -0.389  1.00  0.00           O
+HETATM    3   C2 M828    0      -0.026  -0.552   0.106  1.00  0.00           C
+HETATM    4   H4 M828    0      -0.209  -0.839   1.153  1.00  0.00           H
+HETATM    5   H6 M828    0       0.056  -1.481  -0.479  1.00  0.00           H
+HETATM    6   C1 M828    0       1.263   0.246   0.003  1.00  0.00           C
+HETATM    7   H1 M828    0       2.106  -0.341   0.384  1.00  0.00           H
+HETATM    8   H2 M828    0       1.469   0.514  -1.039  1.00  0.00           H
+HETATM    9   H3 M828    0       1.191   1.169   0.590  1.00  0.00           H
+CONECT    1    2
+CONECT    2    1    3
+CONECT    3    2    4    5    6
+CONECT    4    3
+CONECT    5    3
+CONECT    6    3    7    8    9
+CONECT    7    6
+CONECT    8    6
+CONECT    9    6
+END

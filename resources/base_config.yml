@@ -1,18 +1,13 @@
-name: decane
 mdp_template: deposition.mdp.epy
-work_directory: decane_working
 simulation_type: vacuum_deposition
-n_cycles: 80
 forcefield_file: gromos54a7_atb.ff/forcefield.itp
 insert_distance: 2.0 #nm
 escape_tolerance: 2.0 #nm
 time_step: 0.0025 #ps
 density_fraction_cutoff: 0.05
-overhead_void_space: 5.0 # nm
-deposition_velocity: 0.5 # nm/ps
+overhead_void_space: 5.0 # nm (TODO: maybe write this to avoid duplicating it in worker calculations?)
 use_gpu : False
 description: "Vacuum deposition test"
-run_time: 25.0 #ps
 nstout: 50
 insertions_per_run: 3
 insertion_xy_radius: 0.8 #nm
@@ -21,53 +16,14 @@ seed: 489327835
 temperature: 300 #K
 tau_t: 1.0 # ps
 bath_width: 100
-mixture:
-  FULL:
-    res_name: FULL
-    pdb_file: systems/FULL.pdb
-    itp_file: systems/FULL.itp
-    ratio: 0
-  ETHANOL:
-    res_name: M828
-    pdb_file: ETHANOL.pdb
-    itp_file: ETHANOL.itp
-    ratio: 0
-  PYRIDINE:
-    res_name: G214
-    pdb_file: PYRIDINE.pdb
-    itp_file: PYRIDINE.itp
-    ratio: 0
-  HEX:
-    res_name: I8EW
-    pdb_file: HEXANE.pdb
-    itp_file: HEXANE.itp
-    ratio: 0
-  DEC:
-    res_name: FF5X
-    pdb_file: DECANE.pdb
-    itp_file: DECANE.itp
-    ratio: 1
-  ETHYL_ACETATE:
-    res_name: 5GOY
-    itp_file: ETHYL_ACETATE.itp
-    pdb_file: ETHYL_ACETATE.pdb
-    ratio: 0
-  DMF:
-    res_name: 3E4G
-    itp_file: DMF.itp
-    pdb_file: DMF.pdb
-    ratio: 0
-  DMSO:
-    res_name: M304
-    itp_file: DMSO.itp
-    pdb_file: DMSO.pdb
-    ratio: 0
-  ACETONITRILE:
-    res_name: UZ3N
-    itp_file: ACETONITRILE.itp
-    pdb_file: ACETONITRILE.pdb
-    ratio: 0
 substrate:
   res_name: GRM
   pdb_file: GRM_4nm.pdb
   itp_file: GRM_4nm.itp
+# To be filled:
+# name: {name_str}
+# work_directory: work_{name_str}
+# deposition_velocity: {vel} # nm/ps (0.5 is good default)
+# n_cycles: {n_cycles} (determined based on number of atoms. 50-60 is probably good)
+# run_time: {run_time} #ps (25.0 is good default. Adjust based on deposition_velocity)
+# mixture: ...

@@ -1,0 +1,37 @@
+{
+  "M828": {
+    "name": "Ethanol",
+    "formula": "C2H5OH",
+    "natoms": 9
+  },
+  "G214": {
+    "name": "Pyridine",
+    "formula": "C5H5N",
+    "natoms": 11
+  },
+  "I8EW": {
+    "name": "Hexane",
+    "formula": "C6H14",
+    "natoms": 20
+  },
+  "FF5X": {
+    "name": "Decane",
+    "formula": "C10H22",
+    "natoms": 32
+  },
+  "5GOY": {
+    "name": "Ethyl Acetate",
+    "formula": "CH3CO2C2H5",
+    "natoms": 14
+  },
+  "M304": {
+    "name": "Dimethyl Sulfoxide",
+    "formula": "(CH3)2SO",
+    "natoms": 10
+  },
+  "UZ3N": {
+    "name": "Acetonitrile",
+    "formula": "CH3CN",
+    "natoms": 6
+  }
+}
