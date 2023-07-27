@@ -11,7 +11,7 @@ use std::{
     sync::OnceLock,
 };
 
-pub(crate) static USER_DB: OnceLock<UserDB> = OnceLock::new();
+pub static USER_DB: OnceLock<UserDB> = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoginToken {

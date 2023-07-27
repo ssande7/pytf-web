@@ -2,6 +2,22 @@
 name = "pytf-web"
 version = "0.1.0"
 edition = "2021"
+path = "src/lib.rs"
+
+[lib]
+name = "pytf_web"
+path = "src/lib.rs"
+crate-type = ["lib"]
+
+[[bin]]
+name = "pytf-server"
+path = "src/server.rs"
+dependencies = ["pytf_web"]
+
+[[bin]]
+name = "pytf-worker"
+path = "src/worker.rs"
+dependencies = ["pytf_web"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

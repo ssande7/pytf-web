@@ -6,7 +6,7 @@ use actix_web::{
     cookie::Key, http, post, web, App, HttpMessage, HttpRequest, HttpResponse, HttpServer,
     Responder, dev::Server
 };
-use crate::authentication::{self, UserDB, LoginToken, UserCredentials};
+use pytf_web::authentication::{self, UserDB, LoginToken, UserCredentials};
 
 const FRONTEND_ROOT: &'static str = "./pytf-viewer/build";
 
@@ -51,7 +51,8 @@ async fn user_token(user: Identity) -> impl Responder {
     HttpResponse::Ok().json(LoginToken::from(user_id))
 }
 
-pub async fn server() -> std::io::Result<Server> {
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
     // Load user database
     let _ = authentication::USER_DB.set(UserDB::from_cli_or_default(std::env::args()));
 
@@ -65,7 +66,7 @@ pub async fn server() -> std::io::Result<Server> {
         .await
         .expect("Could not connect to redis-server");
 
-    Ok(HttpServer::new(move || {
+    HttpServer::new(move || {
         let cors = Cors::default()
             .allowed_origin(format!("http://localhost:{port}").as_str())
             .allowed_methods(vec!["GET", "POST"])
@@ -94,5 +95,6 @@ pub async fn server() -> std::io::Result<Server> {
             .service(Files::new("/", FRONTEND_ROOT))
     })
     .bind((address, port))?
-    .run())
+    .run()
+    .await
 }

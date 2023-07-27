@@ -1,10 +1,9 @@
 use actix_cors::Cors;
-use actix_web::dev::Server;
 use actix_web::{HttpServer, http, App, post, web, Responder, HttpResponse};
 use std::{io::prelude::*, path::PathBuf};
 
-use crate::pytf_config::*;
-use crate::pytf_runner::*;
+use pytf_web::pytf_config::*;
+use pytf_web::pytf_runner::*;
 
 // PLAN: Merge into single executable with --mode=server or --mode=worker options.
 //       - Server started with a list of worker addresses
@@ -92,7 +91,8 @@ async fn stop_current_deposition(pytf_handle: web::Data<PytfHandle>) -> impl Res
     HttpResponse::Ok()
 }
 
-pub fn worker() -> std::io::Result<Server> {
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
 
     let runner = PytfRunner::new();
     let runner_handle = web::Data::new(runner.get_handle());
@@ -101,7 +101,7 @@ pub fn worker() -> std::io::Result<Server> {
     let address = "127.0.0.1";
     let port = 8081;
 
-    Ok(HttpServer::new(move || {
+    HttpServer::new(move || {
         let cors = Cors::default()
             .allowed_origin(format!("http://localhost:{port}").as_str())
             .allowed_methods(vec!["GET", "POST"])
@@ -117,6 +117,7 @@ pub fn worker() -> std::io::Result<Server> {
             .wrap(cors)
     })
     .bind((address, port))?
-    .run())
+    .run()
+    .await
 }
 
