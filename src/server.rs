@@ -4,7 +4,7 @@ use actix_identity::{Identity, IdentityMiddleware};
 use actix_session::{storage::RedisSessionStore, SessionMiddleware};
 use actix_web::{
     cookie::Key, http, post, web, App, HttpMessage, HttpRequest, HttpResponse, HttpServer,
-    Responder, dev::Server
+    Responder
 };
 use pytf_web::authentication::{self, UserDB, LoginToken, UserCredentials};
 
