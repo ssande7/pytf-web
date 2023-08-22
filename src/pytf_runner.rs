@@ -1,22 +1,23 @@
-use std::{sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}}, path::PathBuf};
+use std::{sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}, Condvar}, path::PathBuf};
 use crate::pytf::*;
 
 #[derive(Debug)]
 pub struct PytfRunner {
-    next_config: Arc<Mutex<Option<PathBuf>>>,
+    next_config: Arc<(Mutex<Option<PathBuf>>, Condvar)>,
     pytf: Option<Pytf>,
     stop: Arc<AtomicBool>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PytfHandle {
-    next_config: Arc<Mutex<Option<PathBuf>>>,
+    next_config: Arc<(Mutex<Option<PathBuf>>, Condvar)>,
     stop: Arc<AtomicBool>,
 }
 
 impl PytfHandle {
     pub fn new_config(&self, config: Option<PathBuf>) {
-        *(self.next_config.lock().unwrap()) = config;
+        *(self.next_config.0.lock().unwrap()) = config;
+        self.next_config.1.notify_one();
     }
 
     pub fn stop(&self) {
@@ -26,7 +27,12 @@ impl PytfHandle {
 
 impl PytfRunner {
     pub fn new() -> Self {
-        Self { next_config: Arc::new(Mutex::new(None)), pytf: None, stop: Arc::new(AtomicBool::new(false)), }
+        Self {
+            next_config: Arc::new((Mutex::new(None),
+                Condvar::new())),
+            pytf: None,
+            stop: Arc::new(AtomicBool::new(false)),
+        }
     }
 
     pub fn get_handle(&self) -> PytfHandle {
@@ -36,7 +42,7 @@ impl PytfRunner {
     pub fn start(mut self) {
         loop {
             // Check for a new configuration to run
-            let new_config = { self.next_config.lock().unwrap().take() };
+            let new_config = { self.next_config.0.lock().unwrap().take() };
             
             // Switch to new configuration if it's there
             if let Some(new_config) = new_config {
@@ -64,9 +70,9 @@ impl PytfRunner {
                 }
             }
 
-            // If there's nothing left to do, wait a bit before checking for a new config
+            // If there's nothing left to do, wait for a new config
             if self.pytf.is_none() {
-                std::thread::sleep(std::time::Duration::from_millis(500));
+                drop(self.next_config.1.wait(self.next_config.0.lock().unwrap()).unwrap());
             }
         }
     }

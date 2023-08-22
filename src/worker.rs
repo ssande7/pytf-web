@@ -1,5 +1,5 @@
 use actix_cors::Cors;
-use actix_web::{HttpServer, http, App, post, web, Responder, HttpResponse};
+use actix_web::{HttpServer, http, App, get, post, web, Responder, HttpResponse};
 use std::{io::prelude::*, path::PathBuf};
 
 use pytf_web::pytf_config::*;
@@ -26,7 +26,8 @@ use pytf_web::pytf_runner::*;
 
 // TODO: Make this require authentication governed by a shared key between server and workers
 #[post("/deposit")]
-async fn run_deposition(mut config: web::Json<PytfConfig>, pytf_handle: web::Data<PytfHandle>) -> impl Responder {
+async fn deposit(mut config: web::Json<PytfConfig>, pytf_handle: web::Data<PytfHandle>) -> impl Responder {
+    println!("Received config: {config:?}");
     // Fill extra fields for pytf compatibility and calculate unique name
     config.prefill();
     let jobname = config.name().unwrap(); // Safe to unwrap since name is set in prefill
@@ -55,7 +56,7 @@ async fn run_deposition(mut config: web::Json<PytfConfig>, pytf_handle: web::Dat
                 format!("Failed to copy base config file for {jobname}: {e}")
             )
         }
-    
+
         // Write config.yml to jobname directory
         let mut config_file = match std::fs::OpenOptions::new()
             .write(true)
@@ -84,12 +85,23 @@ async fn run_deposition(mut config: web::Json<PytfConfig>, pytf_handle: web::Dat
 
 // TODO: Make this require authentication governed by a shared key between server and workers
 #[post("/stop")]
-async fn stop_current_deposition(pytf_handle: web::Data<PytfHandle>) -> impl Responder {
+async fn stop(pytf_handle: web::Data<PytfHandle>) -> impl Responder {
+    println!("Received stop signal");
     // Null out next_config so a new simulation isn't started on the next loop iteration
     pytf_handle.new_config(None);
     pytf_handle.stop();
     HttpResponse::Ok()
 }
+
+#[get("/")]
+async fn test() -> impl Responder {
+    HttpResponse::Ok().body("Hello")
+}
+
+//TODO:
+// #[get("/transfer")]
+// Sent by other worker. Transfer partially completed simulation to a different worker.
+// Report back to server once transfer is complete.
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -103,7 +115,8 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(move || {
         let cors = Cors::default()
-            .allowed_origin(format!("http://localhost:{port}").as_str())
+            .allowed_origin(&format!("http://localhost:{port}"))
+            .allowed_origin("http://localhost:8080")
             .allowed_methods(vec!["GET", "POST"])
             .allowed_headers(vec![
                 http::header::AUTHORIZATION,
@@ -113,8 +126,10 @@ async fn main() -> std::io::Result<()> {
             .max_age(3600);
         App::new()
             .app_data(web::Data::clone(&runner_handle))
-            .service(run_deposition)
             .wrap(cors)
+            .service(deposit)
+            .service(stop)
+            .service(test)
     })
     .bind((address, port))?
     .run()

@@ -2,41 +2,76 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Particles, Visualizer } from 'omovi'
 import { Vector3 } from 'three'
 import { logout } from './Login'
+import { PytfConfig, MixtureComponentDetailed } from './types';
+import MolList from './MolList';
+import SubmitButton from './SubmitButton';
 import '../App.css';
 
 const TimerSymbol = <>&#x23F1;</>;
 const SaveSymbol = <>&#x1F5AA;</>;
 const ResetCameraSymbol = <>&#x1F441;</>;
 
-const Composition: React.FC = () => {
-  const dummy_list = ['foo', 'bar', 'baz'].map((value) => { return <li> {value} </li>})
+interface IComposition {
+  running: boolean,
+  setRunning: React.Dispatch<React.SetStateAction<boolean>>,
+}
+
+const Composition: React.FC<IComposition>
+  = ({running, setRunning}: IComposition) =>
+{
+  const [molecules, setMolecules] = useState<Array<MixtureComponentDetailed>>([]);
+  const [config, setConfig] = useState<PytfConfig>({deposition_velocity: 0.1, mixture: []});
+
+  // Get the list of available molecules on load
+  useEffect(() => {
+    let abort = new AbortController();
+    const fetchMolecules = async () => {
+      const mols: {molecules: Array<MixtureComponentDetailed>} =
+        await fetch("/molecules", abort).then(data => data.json());
+      console.log("Got molecules: " + JSON.stringify(mols))
+      setMolecules(mols.molecules)
+    };
+    fetchMolecules();
+    return () => abort.abort();
+  }, [setMolecules]);
+
+  // Set up base config with everything zeroed
+  useEffect(() => {
+    setConfig({
+      ...config,
+      mixture: molecules.map((mol) => {return {res_name: mol.res_name, ratio: 0}}),
+    });
+  }, [molecules, setConfig]);
+
   return (
     <div className="MD-param-group">
       <h3>Composition</h3>
-      <p>
-        <ul>
-          <li>{dummy_list}</li>
-        </ul>
-      </p>
-    </div>
-  );
-}
-
-const Protocol: React.FC = () => {
-  return (
-    <div className="MD-param-group">
+      <MolList running={running} molecules={molecules} config={config} setConfig={setConfig}/>
       <h3>Protocol</h3>
-      <p>Deposition rate:</p>
-      <p>Deposition velocity:</p>
+      <div className="MD-vis-controls">
+        <div>Deposition velocity:</div>
+        <div className="HorizontalSpacer"/>
+        <div>{config.deposition_velocity} nm/ps</div>
+      </div>
+      <input type="range" min={1} max={50} defaultValue={10}
+        onChange = {
+          (e) => setConfig({
+            ...config,
+            deposition_velocity: e.target.valueAsNumber/100.0
+          })
+        }
+      />
+      <p/>
+      <SubmitButton config = {config} running = {running} setRunning = {setRunning}/>
     </div>
   );
 }
 
-interface VisProps {
+interface IVis {
   numParticles: number;
 }
 
-const Vis: React.FC<VisProps> = ({ numParticles }) => {
+const Vis: React.FC<IVis> = ({ numParticles }) => {
   const [vis, setVis] = useState<Visualizer | null>(null);
   const [loadingVis, setLoadingVis] = useState(false);
   const domElement = useRef<HTMLDivElement | null>(null);
@@ -174,7 +209,7 @@ const Vis: React.FC<VisProps> = ({ numParticles }) => {
             <input type="range" min={1} max={30} style={{flexGrow: 4, maxWidth: '80%', verticalAlign: 'middle'}} defaultValue={fps}
               onChange={(e) => {
                 if (e.target.value) {
-                  setFps(Number(e.target.value))
+                  setFps(e.target.valueAsNumber)
                 }
               }}
             />
@@ -198,6 +233,7 @@ interface IViewer {
   setToken: React.Dispatch<React.SetStateAction<string | null>>;
 }
 const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
+  const [running, setRunning] = useState(false);
   return (
     <>
       <div className="App">
@@ -206,9 +242,8 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
             <div className="App-header">
               <h1>Vacuum Deposition</h1>
             </div>
-            <div style={{display: 'grid', alignItems: 'left'}}>
-              <Composition />
-              <Protocol />
+            <div style={{display: 'grid', width: '100%', alignItems: 'left'}}>
+              <Composition running={running} setRunning={setRunning} />
             </div>
           </div>
           <div className="MD-vis" >

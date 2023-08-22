@@ -47,6 +47,7 @@
 }
 
 .MD-params {
+  width: 30%;
   padding-left: 2vh;
   min-height: 0vh;
   align-items: flex-start;

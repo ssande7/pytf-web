@@ -27,6 +27,7 @@ actix-session = { version = "0.7.2", features = ["redis-rs-session", "redis-rs-t
 actix-web = "4.3.1"
 anyhow = "1.0.72"
 argon2 = "0.5.0"
+awc = "3.1.1"
 libc = "0.2.147"
 num = "0.4.1"
 pyo3 = { version = "0.19.1", features = ["auto-initialize", "anyhow"] }
