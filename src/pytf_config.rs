@@ -35,6 +35,8 @@ impl MoleculeResources {
 
 pub static AVAILABLE_MOLECULES: OnceLock<MoleculeResources> = OnceLock::new();
 
+// TODO: Split this into the base transfer type and the fully filled type to avoid all the
+//       Options and unwraps
 #[serde_with::skip_serializing_none]
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PytfConfig {
@@ -59,6 +61,21 @@ fn serialize_f32_1dec<S: serde::Serializer>(x: &f32, s: S) -> Result<S::Ok, S::E
 }
 fn serialize_f32_2dec<S: serde::Serializer>(x: &f32, s: S) -> Result<S::Ok, S::Error> {
     s.serialize_str(&format!("{x:.2}"))
+}
+
+impl Default for PytfConfig {
+    fn default() -> Self {
+        let mut out = Self {
+            name: None,
+            work_directory: None,
+            n_cycles: None,
+            run_time: 0.,
+            deposition_velocity: 0.1,
+            mixture: Vec::new(),
+        };
+        out.prefill();
+        out
+    }
 }
 
 impl PytfConfig {

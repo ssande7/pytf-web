@@ -84,9 +84,10 @@ async fn deposit(mut config: web::Json<PytfConfig>, pytf_handle: web::Data<PytfH
 }
 
 // TODO: Make this require authentication governed by a shared key between server and workers
-#[post("/stop")]
-async fn stop(pytf_handle: web::Data<PytfHandle>) -> impl Responder {
-    println!("Received stop signal");
+#[post("/stop/{jobname}")]
+async fn stop(pytf_handle: web::Data<PytfHandle>, jobname: web::Path<String>) -> impl Responder {
+    println!("Received stop signal for {jobname}");
+    // TODO: check jobname matches current job and cancel it
     // Null out next_config so a new simulation isn't started on the next loop iteration
     pytf_handle.new_config(None);
     pytf_handle.stop();
@@ -106,6 +107,7 @@ async fn test() -> impl Responder {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
 
+    // TODO: MAKE THIS AN ACTOR!???
     let runner = PytfRunner::new();
     let runner_handle = web::Data::new(runner.get_handle());
     let _ = std::thread::spawn(|| runner.start()); // Detach from pytf thread

@@ -1,5 +1,6 @@
-use std::{collections::HashMap, sync::RwLock};
+use std::{collections::{HashMap, HashSet}, sync::{RwLock, Arc, Mutex}, time::Duration};
 
+use actix::{clock::Instant, Actor, Context, Handler, Message};
 use actix_cors::Cors;
 use actix_files::{Files, NamedFile};
 use actix_identity::{Identity, IdentityMiddleware};
@@ -57,7 +58,7 @@ async fn user_token(user: Identity) -> impl Responder {
 }
 
 #[post("/submit")]
-async fn submit(_user: Identity, mut config: web::Json<PytfConfig>, workers: web::Data<RwLock<WorkerAllocation>>) -> impl Responder {
+async fn submit(user: Identity, mut config: web::Json<PytfConfig>, job_queue: web::Data<JobQueue>) -> impl Responder {
     println!("Received config: {config:?}");
     config.canonicalize();
     config.prefill();
@@ -67,44 +68,29 @@ async fn submit(_user: Identity, mut config: web::Json<PytfConfig>, workers: web
     // * Keep track of which worker is working on what, and with what status (allocated, working, done)
 
     println!("Processed config: {config:?}");
+    job_queue.request_job(config.into_inner(), user.id().unwrap());
 
-    let existing_job = {
-        workers.read().expect("workers mutex poisoned!")
-            .get_job(&config)
-            .and_then(|j| Some((j.worker.clone(), j.status)))
-    };
-
-    // TODO: Make default empty job send back just the graphene base?
-
-    let worker =
-    if let Some((worker, status)) = existing_job {
-        match status {
-            JobStatus::Allocated
-                |JobStatus::Running
-                | JobStatus::Complete
-                => worker,
-            JobStatus::Failed
-                => return HttpResponse::InternalServerError().body("Unknown job failure. Try some different input parameters."),
-            JobStatus::Idle
-                => unimplemented!("Move job to another worker and connect the user"),
-        }
-    } else if let Some(worker) = {
-        workers.write().unwrap().add_job(config.into_inner()).await
-    } {
-        worker
-    } else {
-        eprintln!("Failed to find a worker");
-        return HttpResponse::InternalServerError().body("No workers available! Try again later.");
-    };
-    println!("Selected worker {worker}");
-
-    HttpResponse::Ok().body(worker)
+    HttpResponse::Ok() // TODO: Send web socket info? Or job name?
 }
 
 #[post("/cancel")]
-async fn cancel(_user: Identity) -> impl Responder {
-    // TODO: Cancel the job currently being run by the user
-    HttpResponse::Ok()
+async fn cancel(user: Identity, job_queue: web::Data<JobQueue>) -> impl Responder {
+    let client = user.id().unwrap();
+    println!("Got cancel signal from {client}");
+    // Get handle to user's job, leaving queue unlocked afterwards
+    let client_job = { job_queue.client_map.read().unwrap().get(&client).cloned() };
+    // Make sure client was known
+    if let Some(client_job) = client_job {
+        println!("Client {client} is known.");
+        // Make sure client has a current job
+        if let Some(job) = client_job.lock().unwrap().take() {
+            println!("Cancelling job for client {client}");
+            job.lock().unwrap().remove_client(&client);
+            return HttpResponse::Ok().finish()
+        }
+    }
+    HttpResponse::NotModified().body("No job in queue for client")
+
 }
 
 #[get("/molecules")]
@@ -112,52 +98,21 @@ async fn molecules(_user: Identity) -> impl Responder {
     HttpResponse::Ok().json(AVAILABLE_MOLECULES.get())
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum WorkerStatus {
-    /// Worker is currently idle
-    Idle,
-    /// Worker is allocated to job with given name, but hasn't reported starting it yet
-    Allocated(String),
-    /// Worker is currently running job with given name
-    Running(String),
+
+#[get("/get_work")]
+async fn get_work(user: Identity, job_queue: web::Data<JobQueue>) -> impl Responder {
+    // TODO:
+    //  * Allow workers to log in with a "worker" username
+    //  * Set their id to their address
+    //  * Store list of registered workers, check against it here before proceeding.
+    job_queue.assign_worker(user.id().unwrap());
+    HttpResponse::Ok()
 }
 
-#[derive(Debug, Clone, Copy)]
-enum JobStatus {
-    /// Job has been allocated to a worker
-    Allocated,
-    /// Job is currently running
-    Running,
-    /// Job has completed successfully
-    Complete,
-    /// Job was partly run, but stopped before completion
-    Idle,
-    /// Job failed with an error
-    Failed,
-}
-
-#[derive(Debug, Clone)]
-struct Simulation {
-    config: PytfConfig,
-    worker: String,
-    status: JobStatus,
-}
-
-impl PartialEq<PytfConfig> for Simulation {
-    fn eq(&self, other: &PytfConfig) -> bool {
-        other == &self.config
-    }
-    fn ne(&self, other: &PytfConfig) -> bool {
-        other != &self.config
-    }
-}
-
-// TODO: Worker keeps track of attached users, reports back when no users left.
 
 struct WorkerAllocation {
     /// Keep track of which job each worker is working on
-    workers: HashMap<String, WorkerStatus>,
-    jobs: HashMap<String, Simulation>,
+    workers: RwLock<HashMap<String, Option<Job>>>,
 }
 
 impl WorkerAllocation {
@@ -168,8 +123,8 @@ impl WorkerAllocation {
             if arg == "-w" || arg == "--workers" {
                 let mut worker_hash = HashMap::with_capacity(args.len());
                 while let Some(worker) = args.next() {
-                    if worker_hash.insert(worker.clone(), WorkerStatus::Idle).is_some() {
-                        eprintln!("Got duplicate worker address: {worker}");
+                    if worker_hash.insert(worker.clone(), None).is_some() {
+                        eprintln!("WARNING: Got duplicate worker address: {worker}");
                     }
                 }
                 workers = Some(worker_hash);
@@ -180,64 +135,254 @@ impl WorkerAllocation {
             eprintln!("WARNING: No worker addresses specified!");
             HashMap::new()
         });
-        Self {
-            workers,
-            jobs: HashMap::with_capacity(128),
+        Self { workers: RwLock::new(workers) }
+    }
+
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum JobStatus {
+    /// Waiting to be run
+    Waiting,
+    /// Running on the specified worker
+    Running(String),
+    /// Paused, last worked on by specified worker
+    Paused(String),
+    /// Should be stolen from the specified worker
+    Steal(String),
+    /// Currently being stolen from the specified worker
+    Stealing(String),
+    /// Job has completed
+    Finished,
+}
+
+#[derive(Debug, Clone)]
+struct JobInner {
+    config: PytfConfig,
+    status: JobStatus,
+    clients: HashMap<String, Instant>,
+    timestamp_worker: Instant,
+}
+type Job = Arc<Mutex<JobInner>>;
+
+impl JobInner {
+    pub fn wrap(self) -> Job {
+        Arc::new(Mutex::new(self))
+    }
+
+    pub fn remove_client(&mut self, client: &str) {
+        self.clients.remove(client);
+        if self.clients.is_empty() {
+            println!("Job with name {} is now empty.", self.config.name().unwrap());
+            self.status = match &self.status {
+                JobStatus::Waiting => JobStatus::Waiting,
+                JobStatus::Finished => JobStatus::Finished,
+
+                JobStatus::Running(worker) => {
+                    self.signal_pause(&worker);
+                    JobStatus::Paused(worker.clone())
+                },
+                JobStatus::Paused(worker) => JobStatus::Paused(worker.clone()),
+
+                // TODO: after stealing a job, worker should check whether
+                // that job is now paused, in which case the Paused(worker) is updated
+                JobStatus::Stealing(worker) => JobStatus::Paused(worker.clone()),
+                JobStatus::Steal(worker) => JobStatus::Paused(worker.clone()),
+            }
         }
     }
 
-    pub fn get_job(&self, config: &PytfConfig) -> Option<&Simulation> {
-        let Some(jobname) = config.name() else { return None };
-        self.jobs.get(jobname)
+    pub fn signal_pause(&self, worker: &str) {
+        let jobname = self.config.name().unwrap();
+        println!("Sending stop signal to {worker} for {jobname}");
+        actix_web::rt::spawn(
+            Client::default()
+                .post(format!("{worker}/stop/{jobname}"))
+                .send_json(&JobSignalPause::from(jobname.clone()))
+        );
+    }
+}
+
+
+#[derive(Debug, Clone)]
+struct JobQueue {
+    /// Main job storage, indexed by job name (which is unique)
+    job_lookup: Arc<Mutex<HashMap<String, Job>>>,
+    /// Map of which client cares about which job. Job in Mutex so it can be switched out
+    client_map: Arc<RwLock<HashMap<String, Arc<Mutex<Option<Job>>>>>>,
+    /// List of unfinished jobs - candidates for work requests
+    unfinished_jobs: Arc<RwLock<Vec<Job>>>,
+}
+
+#[derive(Debug, Clone)]
+struct JobAssignment {
+    /// Config to run
+    job: Job,
+    /// Worker to steal previous results from
+    steal_from: Option<String>,
+}
+
+impl JobAssignment {
+    pub fn send(self, worker: String) {
+        let message: JobForWorker = self.into();
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct JobForWorker {
+    config: PytfConfig,
+    steal_from: Option<String>,
+}
+
+impl From<JobAssignment> for JobForWorker {
+    fn from(value: JobAssignment) -> Self {
+        Self {
+            config: value.job.lock().unwrap().config.clone(),
+            steal_from: value.steal_from,
+        }
+    }
+}
+
+pub const STEAL_TIMEOUT: Duration = Duration::from_secs(30);
+
+impl JobQueue {
+    fn new() -> Self {
+        let null_job = JobInner {
+            config: PytfConfig::default(),
+            status: JobStatus::Finished,
+            clients: HashMap::with_capacity(32),
+            timestamp_worker: Instant::now(),
+        };
+        let null_name = null_job.config.name().unwrap();
+        let mut job_lookup = HashMap::with_capacity(128);
+        job_lookup.insert(null_name.clone(), null_job.wrap());
+        Self {
+            job_lookup: Arc::new(Mutex::new(job_lookup)),
+            client_map: Arc::new(RwLock::new(HashMap::with_capacity(64))),
+            unfinished_jobs: Arc::new(RwLock::new(Vec::with_capacity(128))),
+        }
     }
 
-    pub async fn add_job(&mut self, config: PytfConfig) -> Option<String> {
-        println!("Adding job...");
-        let Some(jobname) = config.name() else {
-            eprintln!("WARNING: Called add_job with uninitialised config");
-            return None;
+    /// Find a job for a worker and assign it if one is found.
+    /// Returns a copy of the configuration (to be forwarded to the worker)
+    /// if a job is found, or `None` if there are no avialable jobs.
+    fn assign_worker(&self, worker: String) -> Option<JobAssignment> {
+        for j in self.unfinished_jobs.read().unwrap().iter() {
+            let mut job = j.lock().unwrap();
+            if job.clients.len() > 0 {
+                match &job.status {
+                    JobStatus::Waiting => {
+                        job.status = JobStatus::Running(worker);
+                        job.timestamp_worker = Instant::now();
+                        return Some(JobAssignment { job: j.clone(), steal_from: None });
+                    },
+                    JobStatus::Steal(old_worker) => {
+                        let old_worker = old_worker.clone();
+                        job.status = JobStatus::Stealing(old_worker.clone());
+                        job.timestamp_worker = Instant::now();
+                        return Some(JobAssignment { job: j.clone(), steal_from: Some(old_worker) });
+                    },
+                    JobStatus::Stealing(old_worker) => {
+                        let now = Instant::now();
+                        if now.duration_since(job.timestamp_worker) > STEAL_TIMEOUT {
+                            let old_worker = old_worker.clone();
+                            eprintln!("Timeout on stealing job from worker {old_worker}. Reassigning to {worker}.");
+                            // Status unchanged since still stealing from the same worker
+                            job.timestamp_worker = Instant::now();
+                            return Some(JobAssignment {
+                                job: j.clone(),
+                                steal_from: Some(old_worker),
+                            });
+                        }
+                    },
+                    _ => (),
+                }
+            }
+        }
+        None
+    }
+
+    /// Request from a given `client` that a job be added to the queue.
+    /// If the client was previously interested in a different job, that
+    /// interest is cleared. Any job that ends up with no remaining interest
+    /// will have a cancel signal sent to the attached worker.
+    fn request_job(&self, config: PytfConfig, client: String) {
+        // Get the job currently mapped to the client, or create one
+        // if we haven't seen this client before
+        let client_job = {
+            // Add client to lookup if they're not already in it.
+            // Need to use write() lock to avoid potential race
+            // between dropping a read() lock after checking existence
+            // and creating a write() lock to insert
+            let mut client_map = self.client_map.write().unwrap();
+            println!("Client map is {client_map:?}");
+            if !client_map.contains_key(&client) {
+                println!("Adding client {client} to map with blank job");
+                let no_job = Arc::new(Mutex::new(None));
+                client_map.insert(client.clone(), no_job.clone());
+                no_job
+            } else {
+                println!("Client is known, retrieving previous job.");
+                client_map.get(&client).unwrap().clone()
+            }
         };
-        let jobname = jobname.clone();
+        // Check whether job already exists.
+        // Keep job_lookup locked while we work with it to avoid races
+        // (i.e. we can only add one new job at a time)
+        let jobname = config.name().unwrap().clone();
+        let mut lock_existing_jobs = self.job_lookup.lock().unwrap();
+        let existing = lock_existing_jobs.get(&jobname).and_then(|j| Some(j.clone()));
+        if let Some(job) = existing {
+            // Attach client to job.
+            let mut job_lock = job.lock().unwrap();
+            println!("Job with name {} already exists.", job_lock.config.name().unwrap());
+            let res = job_lock.clients.insert(client.clone(), Instant::now()).is_none();
 
-        let Some((idle_worker, _)) = self.workers.iter().find(|&(_, status)| {
-            *status == WorkerStatus::Idle
-        }) else { eprintln!("No workers available!"); return None };
-        let idle_worker = idle_worker.clone();
-        println!("Found idle worker: {idle_worker}");
-
-        // Mark worker as assigned to this job
-        *self.workers.get_mut(&idle_worker).unwrap() = WorkerStatus::Allocated(jobname.clone());
-
-        // TODO: Send message to worker to tell it to start this job.
-        //       Thread holds a write() lock at this point, so other threads will
-        //       wait until this job has started before they can check for/start other jobs.
-        //       Maybe more efficient to send config after this exits so other job requests to the
-        //       server can be handled while this one is starting up? Make sure that doesn't
-        //       introduce a race first...
-
-        // TODO:  Instead of directly sending to worker, just add job to a queue for workers to
-        //        pull from (while registering themselves for that job)?
-        //        Workers send back job results as they produce them (with a retry system?)
-        let worker_client = Client::default();
-        let res = worker_client
-                .put(format!("{idle_worker}/deposit"))
-                .send_json(&config)
-                .await;
-        // TODO: check res for success
-        println!("Submitted job to worker. Result: {res:?}");
-
-
-        self.jobs.insert(
-            jobname,
-            Simulation {
+            // If client wasn't already attached to that job, remove them from their old job
+            if res {
+                println!("Client {client} coming from different job. Attaching to new one.");
+                let old_job = { client_job.lock().unwrap().replace(job.clone()) };
+                if let Some(old_job) = old_job {
+                    let mut old_job = old_job.lock().unwrap();
+                    println!("Removing client {client} from old job with name {}", old_job.config.name().unwrap());
+                    old_job.remove_client(&client);
+                }
+                println!("Finished cleaning up after {client}");
+            } // NOTE: Assuming client_map can't get out of sync. Might need a test here if it can.
+        } else {
+            // Create new job and attach client
+            println!("Creating new job for client {client}");
+            let mut clients = HashMap::with_capacity(32);
+            let now = Instant::now();
+            clients.insert(client.clone(), now);
+            let new_job = JobInner {
                 config,
-                worker: idle_worker.clone(),
-                status: JobStatus::Allocated
-            });
-        // TODO: Arc jobname to avoid so many clones?
+                status: JobStatus::Waiting,
+                clients,
+                timestamp_worker: now,
+            }.wrap();
+            lock_existing_jobs.insert(jobname, new_job.clone());
+            // Add new job to list of unfinished ones
+            self.unfinished_jobs.write().unwrap().push(new_job.clone());
+            let old_job = { client_job.lock().unwrap().replace(new_job) };
+            if let Some(old_job) = old_job {
+                let mut old_job = old_job.lock().unwrap();
+                println!("Removing client {client} from old job with name {}", old_job.config.name().unwrap());
+                old_job.remove_client(&client);
+            }
+        }
+        // TODO: return web socket details based on job_ref?? Or client just asks for more frames?
+        println!("Exiting request_job");
+    }
+}
 
-
-        return Some(idle_worker)
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct JobSignalPause {
+    jobname: String,
+}
+impl From<String> for JobSignalPause {
+    fn from(jobname: String) -> Self {
+        Self { jobname }
     }
 }
 
@@ -263,6 +408,9 @@ async fn main() -> std::io::Result<()> {
     //       - Set up RwLock<HashMap<Worker, String>> for keeping track of which config runs where
     //       - Forward on simulation requests and return worker address for web socket connection
 
+    let worker_allocation = web::Data::new(WorkerAllocation::new());
+    let job_queue = web::Data::new(JobQueue::new());
+
     HttpServer::new(move || {
         let cors = Cors::default()
             .allowed_origin(format!("http://localhost:{port}").as_str())
@@ -274,7 +422,8 @@ async fn main() -> std::io::Result<()> {
             ])
             .max_age(3600);
         App::new()
-            .app_data(web::Data::new(RwLock::new(WorkerAllocation::new())))
+            .app_data(worker_allocation.clone())
+            .app_data(job_queue.clone())
             .wrap(
                 IdentityMiddleware::builder()
                     .visit_deadline(Some(std::time::Duration::from_secs(24 * 60 * 60)))
