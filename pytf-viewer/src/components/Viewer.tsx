@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo, MutableRefObject } from 'react';
 import { Particles, Visualizer } from 'omovi'
 import { Vector3 } from 'three'
 import { logout } from './Login'
@@ -12,12 +12,14 @@ const SaveSymbol = <>&#x1F5AA;</>;
 const ResetCameraSymbol = <>&#x1F441;</>;
 
 interface IComposition {
+  socket: React.MutableRefObject<WebSocket | null>,
+  socket_connected: boolean,
   running: boolean,
   setRunning: React.Dispatch<React.SetStateAction<boolean>>,
 }
 
 const Composition: React.FC<IComposition>
-  = ({running, setRunning}: IComposition) =>
+  = ({socket, socket_connected, running, setRunning}) =>
 {
   const [molecules, setMolecules] = useState<Array<MixtureComponentDetailed>>([]);
   const [config, setConfig] = useState<PytfConfig>({deposition_velocity: 0.1, mixture: []});
@@ -62,16 +64,18 @@ const Composition: React.FC<IComposition>
         }
       />
       <p/>
-      <SubmitButton config = {config} running = {running} setRunning = {setRunning}/>
+      <SubmitButton socket={socket} socket_connected={socket_connected} config={config} running={running} setRunning={setRunning}/>
     </div>
   );
 }
 
 interface IVis {
+  socket: React.MutableRefObject<WebSocket | null>,
+  running: boolean;
   numParticles: number;
 }
 
-const Vis: React.FC<IVis> = ({ numParticles }) => {
+const Vis: React.FC<IVis> = ({socket, running, numParticles }) => {
   const [vis, setVis] = useState<Visualizer | null>(null);
   const [loadingVis, setLoadingVis] = useState(false);
   const domElement = useRef<HTMLDivElement | null>(null);
@@ -234,6 +238,33 @@ interface IViewer {
 }
 const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
   const [running, setRunning] = useState(false);
+  const socket = useRef<WebSocket | null>(null);
+  const [socket_connected, setSocketConnected] = useState(false);
+  const [last_frame, setLastFrame] = useState(0);
+
+  useEffect(() => {
+    let ws_url = window.location.href.replace(new RegExp("^http"), "ws");
+    if (!ws_url.endsWith("/")) {
+      ws_url += "/"
+    }
+    socket.current = new WebSocket(ws_url + "socket");
+    console.log("Socket opened.");
+    socket.current.onopen = () => setSocketConnected(true);
+    socket.current.onclose = () => {
+      console.log("socket closed");
+      setSocketConnected(false)
+    };
+    socket.current.onmessage = e => {
+      const message = JSON.parse(e.data);
+      console.log("Got message: ", message);
+    };
+
+    const current = socket.current;
+    return () => {
+      current.close();
+    }
+  }, [setSocketConnected]);
+
   return (
     <>
       <div className="App">
@@ -243,11 +274,11 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
               <h1>Vacuum Deposition</h1>
             </div>
             <div style={{display: 'grid', width: '100%', alignItems: 'left'}}>
-              <Composition running={running} setRunning={setRunning} />
+              <Composition socket={socket} socket_connected={socket_connected} running={running} setRunning={setRunning}/>
             </div>
           </div>
           <div className="MD-vis" >
-            <Vis numParticles={1000} />
+            <Vis socket={socket} running={running} numParticles={1000} />
           </div>
         </div>
         <div style={{display: 'flex', flexDirection: 'row-reverse'}}>
