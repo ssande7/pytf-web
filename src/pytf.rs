@@ -1,8 +1,8 @@
-use std::path::Path;
+use std::{path::Path, fmt::Display};
 use anyhow::Result;
 use pyo3::prelude::*;
-use xdrfile::prelude::*;
-// NOTE: pyo3 requires python3-dev installed (included in Arch python3, but maybe not others)
+// NOTE: pyo3 requires python3-dev installed
+// (included in Arch python3, but maybe not others)
 
 /// Error type for anyhow compatibility
 #[derive(Debug, Copy, Clone)]
@@ -25,8 +25,6 @@ pub struct Pytf {
     deposition: Py<PyAny>,
     run_id: i32,
     final_run_id: i32,
-    trajectory: Vec<XTCFrame>,
-    // traj_writer: Option<Thread>,
 }
 
 // TODO: make this a cfg switch
@@ -45,13 +43,11 @@ impl Pytf {
                 deposition: pytf.into(),
                 run_id,
                 final_run_id,
-                trajectory: Vec::with_capacity(final_run_id as usize),
-                // traj_writer: None,
             })
         })
     }
 
-    /// Perform one run cycle. Returns `Ok(Some(deposition.run_ID))` if successful.
+    /// Perform one deposition cycle.
     pub fn cycle(&mut self) -> Result<()> {
         Python::with_gil(|py| -> Result<()> {
             let success = self.deposition.call_method0(py, "cycle")?.extract(py)?;
@@ -75,6 +71,44 @@ impl Pytf {
     #[inline(always)]
     pub fn final_run_id(&self) -> i32 {
         self.final_run_id
+    }
+}
+
+pub enum PytfFile {
+    Log,
+    InputCoords,
+    FinalCoords,
+    Trajectory,
+}
+impl PytfFile {
+    pub fn ext(&self) -> &'static str {
+        match self {
+            Self::Log => "log",
+            Self::InputCoords
+                | Self::FinalCoords
+                => "gro",
+            Self::Trajectory => "xtc",
+        }
+    }
+
+    pub fn content(&self) -> &'static str {
+        match self {
+            Self::Log => "log",
+            Self::InputCoords => "input-coordinates",
+            Self::FinalCoords => "final-coordinates",
+            Self::Trajectory => "trajectory",
+        }
+    }
+
+    pub fn path(&self, workdir: impl AsRef<str>, jobname: impl AsRef<str>, run_id: usize) -> String {
+        let workdir = workdir.as_ref();
+        let jobname = jobname.as_ref();
+        format!("{workdir}/{self}/{jobname}_{self}_{run_id}.{}", self.ext())
+    }
+}
+impl Display for PytfFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.content())
     }
 }
 

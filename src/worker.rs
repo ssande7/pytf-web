@@ -1,140 +1,35 @@
-use actix_cors::Cors;
-use actix_web::{HttpServer, http, App, get, post, web, Responder, HttpResponse};
-use std::{io::prelude::*, path::PathBuf};
+use anyhow::anyhow;
+use actix_web::web::Bytes;
+use awc::ws;
+use pytf_web::{pytf_frame::{AtomNameMap, ATOM_NAME_MAP}, worker_client::WsMessage};
 
-use pytf_web::pytf_config::*;
-use pytf_web::pytf_runner::*;
+use pytf_web::worker_client::PytfServer;
 
-// PLAN: Merge into single executable with --mode=server or --mode=worker options.
-//       - Server started with a list of worker addresses
-//       - Server receives request to run simulation with minimal PytfConfig json object
-//       - Server calls `canonicalize_ratios()` and sets `(config.name = Some(config.get_name())`
-//       - Server chooses worker to handle the config:
-//          * If a worker is currently running the specified config, just link the user to that
-//            worker.
-//          * If a worker previously handled the specified config and completed it, just link the
-//            user to that worker.
-//          * If a worker previously handled the specified config but didn't complete it and is now
-//            working on something else, send the config to a different worker with instruction to
-//            copy previous work from the previous worker. This new worker is now the owner of that
-//            config.
-//      - When a worker receives a new config to work on, it calls `config.prefill()` to fill out
-//        the remaining details, then creates a config.yml file and sets up a pytf deposition
-//        object to work on it.
-//      - Users connected directly to the relevant worker via WebSockets. Worker streams trajectory
-//        (in CBOR format?) to user as each pack of frames (one .xtc file) becomes available
+#[actix_rt::main]
+async fn main() -> anyhow::Result<()> {
 
-// TODO: Make this require authentication governed by a shared key between server and workers
-#[post("/deposit")]
-async fn deposit(mut config: web::Json<PytfConfig>, pytf_handle: web::Data<PytfHandle>) -> impl Responder {
-    println!("Received config: {config:?}");
-    // Fill extra fields for pytf compatibility and calculate unique name
-    config.prefill();
-    let jobname = config.name().unwrap(); // Safe to unwrap since name is set in prefill
-
-    // Get yaml string to append to config
-    let Ok(yml) = serde_yaml::to_string(&config) else {
-        return HttpResponse::BadRequest().body(
-            format!("Failed to convert config to yaml")
-        )
+    // Expect server address as first command line argument and worker key as second
+    let mut args = std::env::args().skip(1);
+    let Some(server_addr) = args.next() else {
+        return Err(anyhow!("Expected two positional arguments for server address and key string"));
+    };
+    let Some(key) = args.next() else {
+        return Err(anyhow!("Missing key string argument"));
     };
 
-    // Create working directory if it doesn't already exist
-    let mut config_yml = PathBuf::from(config.workdir().unwrap());
-    if !config_yml.is_dir() {
-        if let Err(e) = std::fs::create_dir(&config_yml) {
-            return HttpResponse::BadRequest().body(
-                format!("Failed to create job directory for {jobname}: {e}")
-            )
-        }
-    }
-    // Create config.yml in working directory if it doesn't already exist
-    config_yml.push("config.yml");
-    if !config_yml.is_file() {
-        if let Err(e) = std::fs::copy("resources/base_config.yml", &config_yml) {
-            return HttpResponse::InternalServerError().body(
-                format!("Failed to copy base config file for {jobname}: {e}")
-            )
-        }
+    // Load atom name map
+    let _ = ATOM_NAME_MAP.set(AtomNameMap::from_cli_or_default(std::env::args()));
 
-        // Write config.yml to jobname directory
-        let mut config_file = match std::fs::OpenOptions::new()
-            .write(true)
-            .append(true)
-            .open(&config_yml)
-        {
-            Ok(f) => f,
-            Err(e) => {
-                return HttpResponse::InternalServerError().body(
-                    format!("Error opening {config_yml:?} for appending: {e}")
-                )
-            }
-        };
-        if let Err(e) = writeln!(config_file, "\n{}", yml) {
-            return HttpResponse::InternalServerError().body(
-                format!("Error writing config file for {jobname}: {e}")
-            )
-        }
-    }
+    // Set up connection to server. Server must be available or this will fail.
+    let pytf_server = PytfServer::connect(server_addr, key).await?;
+    println!("Sending test ping");
+    pytf_server.do_send(WsMessage(ws::Message::Ping(Bytes::from_static(b""))));
 
-    // Start new pytf simulation
-    pytf_handle.new_config(Some(config_yml));
-
-    HttpResponse::Ok().finish()
+    let _ = actix_rt::signal::ctrl_c().await?;
+    Ok(())
 }
 
-// TODO: Make this require authentication governed by a shared key between server and workers
-#[post("/stop/{jobname}")]
-async fn stop(pytf_handle: web::Data<PytfHandle>, jobname: web::Path<String>) -> impl Responder {
-    println!("Received stop signal for {jobname}");
-    // TODO: check jobname matches current job and cancel it
-    // Null out next_config so a new simulation isn't started on the next loop iteration
-    pytf_handle.new_config(None);
-    pytf_handle.stop();
-    HttpResponse::Ok()
-}
 
-#[get("/")]
-async fn test() -> impl Responder {
-    HttpResponse::Ok().body("Hello")
-}
 
-//TODO:
-// #[get("/transfer")]
-// Sent by other worker. Transfer partially completed simulation to a different worker.
-// Report back to server once transfer is complete.
 
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
-
-    // TODO: MAKE THIS AN ACTOR!???
-    let runner = PytfRunner::new();
-    let runner_handle = web::Data::new(runner.get_handle());
-    let _ = std::thread::spawn(|| runner.start()); // Detach from pytf thread
-
-    let address = "127.0.0.1";
-    let port = 8081;
-
-    HttpServer::new(move || {
-        let cors = Cors::default()
-            .allowed_origin(&format!("http://localhost:{port}"))
-            .allowed_origin("http://localhost:8080")
-            .allowed_methods(vec!["GET", "POST"])
-            .allowed_headers(vec![
-                http::header::AUTHORIZATION,
-                http::header::ACCEPT,
-                http::header::CONTENT_TYPE,
-            ])
-            .max_age(3600);
-        App::new()
-            .app_data(web::Data::clone(&runner_handle))
-            .wrap(cors)
-            .service(deposit)
-            .service(stop)
-            .service(test)
-    })
-    .bind((address, port))?
-    .run()
-    .await
-}
 

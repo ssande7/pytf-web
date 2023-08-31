@@ -56,6 +56,7 @@ const Composition: React.FC<IComposition>
         <div>{config.deposition_velocity} nm/ps</div>
       </div>
       <input type="range" min={1} max={50} defaultValue={10}
+        disabled={running}
         onChange = {
           (e) => setConfig({
             ...config,
@@ -72,10 +73,10 @@ const Composition: React.FC<IComposition>
 interface IVis {
   socket: React.MutableRefObject<WebSocket | null>,
   running: boolean;
-  numParticles: number;
+  particles: Array<Particles>;
 }
 
-const Vis: React.FC<IVis> = ({socket, running, numParticles }) => {
+const Vis: React.FC<IVis> = ({socket, running, particles }) => {
   const [vis, setVis] = useState<Visualizer | null>(null);
   const [loadingVis, setLoadingVis] = useState(false);
   const domElement = useRef<HTMLDivElement | null>(null);
@@ -83,24 +84,6 @@ const Vis: React.FC<IVis> = ({socket, running, numParticles }) => {
   const [camPositionInit, setCamPositionInit] = useState<Vector3 | null>(null);
   const [frame, setFrame] = useState(0);
   const [paused, setPaused] = useState(true);
-
-  const particles = useMemo(() => {
-    const new_particles = [];
-    for (let f = 0; f < 100; f++) {
-      let pframe = new Particles(numParticles)
-      for (let i = 0; i < numParticles; i++) {
-        pframe.add(
-          120 * (Math.random() - 0.5),
-          120 * (Math.random() - 0.5),
-          120 * (Math.random() - 0.5),
-          i,
-          1
-        )
-      }
-      new_particles.push(pframe)
-    }
-    return new_particles;
-  }, [numParticles])
 
   useEffect(() => {
     if (domElement.current && !loadingVis && !vis) {
@@ -152,6 +135,7 @@ const Vis: React.FC<IVis> = ({socket, running, numParticles }) => {
       }
     }, 1000.0/fps))
   }
+
 
   function stopAnimation() {
     if (animationTimer) {
@@ -241,6 +225,8 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
   const socket = useRef<WebSocket | null>(null);
   const [socket_connected, setSocketConnected] = useState(false);
   const [last_frame, setLastFrame] = useState(0);
+  const [next_segment, setNextSegment] = useState(0);
+  const [particles, setParticles] = useState<Array<Particles>>([]);
 
   useEffect(() => {
     let ws_url = window.location.href.replace(new RegExp("^http"), "ws");
@@ -254,9 +240,45 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
       console.log("socket closed");
       setSocketConnected(false)
     };
-    socket.current.onmessage = e => {
-      const message = JSON.parse(e.data);
-      console.log("Got message: ", message);
+    socket.current.onmessage = async (e) => {
+      if (!running) {
+        console.log("Unexpected message while not running");
+        return;
+      }
+      if (e.data instanceof Blob) {
+        // Got a frame, so process it
+        // Data stored in little endian format
+        const buffer = new DataView(await e.data.arrayBuffer());
+        const segment_id    = buffer.getUint32(0, true); // TODO: Is this needed? Use to check against length of particles array?
+        const num_frames    = buffer.getUint32(4, true);
+        const num_particles = buffer.getUint32(8, true);
+        const types = new Uint8Array(buffer.buffer, 12, num_particles);
+        var offset = 12 + num_particles;
+        for (let i = 0; i < num_frames; i++) {
+          const frame = new Particles(num_particles)
+          for (let j = 0; j < 3*num_particles; j += 3) {
+            frame.add(
+              buffer.getFloat32(offset + j, true),
+              buffer.getFloat32(offset + j + 4, true),
+              buffer.getFloat32(offset + j + 8, true),
+              j,
+              types[j]
+              )
+          }
+          particles.push(frame);
+        }
+        setLastFrame(last_frame + num_frames);
+        setParticles(particles);
+        setNextSegment(segment_id + 1);
+      } else if (e.data === "done") {
+        // TODO: Enable histogram roughness analysis
+        setRunning(false);
+      } else if (e.data == "failed") {
+        // TODO: Show message about job failure
+        setRunning(false);
+      } else {
+        console.log("Got unknown message: ", e.data);
+      }
     };
 
     const current = socket.current;
@@ -264,6 +286,13 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
       current.close();
     }
   }, [setSocketConnected]);
+
+  // Request next trajectory segment whenever next_segment changes
+  useEffect(() => {
+    if (socket_connected && running && socket.current) {
+      socket.current.send(next_segment.toString());
+    }
+  }, [socket_connected, next_segment])
 
   return (
     <>
@@ -278,7 +307,7 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
             </div>
           </div>
           <div className="MD-vis" >
-            <Vis socket={socket} running={running} numParticles={1000} />
+            <Vis socket={socket} running={running} particles={particles} />
           </div>
         </div>
         <div style={{display: 'flex', flexDirection: 'row-reverse'}}>

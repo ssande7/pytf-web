@@ -18,8 +18,8 @@ tau_t: 1.0 # ps
 bath_width: 100
 substrate:
   res_name: GRM
-  pdb_file: GRM_4nm.pdb
-  itp_file: GRM_4nm.itp
+  pdb_file: resources/molecules/GRM_4nm.pdb
+  itp_file: resources/molecules/GRM_4nm.itp
 # To be filled:
 # name: {name_str}
 # work_directory: work_{name_str}

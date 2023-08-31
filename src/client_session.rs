@@ -2,13 +2,35 @@ use std::{time::{Duration, Instant}, sync::Arc};
 
 use actix::prelude::*;
 use actix_web_actors::ws;
-use pytf_web::pytf_config::PytfConfig;
+use pytf_web::pytf_config::PytfConfigMinimal;
 
-use crate::job_queue::{Job, JobServer, ClientConnect, ClientDisconnect, ClientReqJob};
+use crate::job_queue::{Job, JobServer, ClientConnect, ClientDisconnect, ClientReqJob, AssignJobs};
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
 
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
+
+/** MESSAGES TO CLIENT
+* text("failed") => Job has failed - try a different configuration.
+*
+* text("done") => Job has completed successfully.
+*
+* binary(b"{frame id: u32 little endian}{frame data}") => Frame of current job
+*
+*/
+
+const MSG_JOB_FAILED: &str = "failed";
+const MSG_JOB_DONE:   &str = "done";
+
+/** MESSAGES FROM CLIENT
+* text("cancel") => Cancel the current job
+*
+* text("{PytfConfigMinimal as json}") => New configuration to run
+*
+* text("{segment_id, parseable to usize}") => Requesting TrajectorySegment data
+*
+*/
+const MSG_JOB_CANCEL: &str = "cancel";
 
 #[derive(Debug)]
 pub struct ClientWsSession {
@@ -123,11 +145,16 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
             }
             ws::Message::Text(text) => {
                 let text = text.trim();
-                if let Ok(mut config) = serde_json::from_str::<PytfConfig>(&text) {
-                    config.canonicalize();
-                    config.prefill();
+                if text == MSG_JOB_CANCEL {
+                    println!("Received cancel signal for client {}", self.id);
+                    self.job = None;
+                    if let Some(job) = &self.job {
+                        job.write().unwrap().remove_client(&ctx.address());
+                    }
+                    println!("Done processing cancel for client {}", self.id);
+                } else if let Ok(config) = serde_json::from_str::<PytfConfigMinimal>(&text) {
                     self.job_server.send(ClientReqJob {
-                        config,
+                        config: config.into(),
                         client_id: self.id.clone(),
                         client_addr: ctx.address(),
                         client_prev_job: self.job.clone(),
@@ -135,26 +162,24 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
                     .into_actor(self)
                     .then(|res, act, ctx| {
                         match res {
-                            Ok(job) => act.job = Some(job),
+                            Ok(job) => {
+                                    act.job = Some(job);
+                                    act.job_server.do_send(AssignJobs {});
+                                }
                             _ => ctx.stop(), // Something went wrong
                         }
                         fut::ready(())
                     })
                     .wait(ctx);
-                } else if text == "cancel" {
-                    println!("Received cancel signal for client {}", self.id);
-                    self.job = None;
+                } else if let Ok(segment_id) = text.parse::<usize>() {
+                    // Client requesting data from frame with specified id
                     if let Some(job) = &self.job {
-                        job.write().unwrap().remove_client(&self.id);
-                    }
-                    println!("Done processing cancel for client {}", self.id);
-                } else if let Ok(frame_id) = text.parse::<usize>() {
-                    // Client has successfully received frames up to `frame_id`,
-                    // so check if we have more for them
-                    if let Some(job) = &self.job {
-                        if frame_id < job.read().unwrap().frames_available {
-                            // TODO: Send next frame
-                            // ctx.binary(frame);
+                        let job = job.read().unwrap();
+                        let next_id = segment_id + 1;
+                        if next_id < job.frames.len(){
+                            if let Some(frame) = &job.frames[segment_id] {
+                                ctx.binary(frame.data());
+                            }
                         }
                     }
                 }
@@ -183,5 +208,25 @@ impl Handler<TrajectoryPing> for ClientWsSession {
     fn handle(&mut self, msg: TrajectoryPing, ctx: &mut Self::Context) -> Self::Result {
         // TODO: Check job for new data to stream out
         ctx.text("new_frames"); // Notify client of new frames available
+    }
+}
+
+
+
+#[derive(Message)]
+#[rtype(result="()")]
+pub struct JobFailed {
+    pub jobname: String,
+}
+
+impl Handler<JobFailed> for ClientWsSession {
+    type Result = ();
+
+    fn handle(&mut self, msg: JobFailed, ctx: &mut Self::Context) -> Self::Result {
+        if let Some(job) = &self.job {
+            if job.read().unwrap().config.name == msg.jobname {
+                ctx.text("failed");
+            }
+        }
     }
 }

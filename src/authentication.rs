@@ -23,10 +23,10 @@ impl From<String> for LoginToken {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct UserCredentials {
-    username: String,
-    password: String,
+    pub username: String,
+    pub password: String,
 }
 
 impl UserCredentials {

@@ -12,15 +12,16 @@ use actix_web::{
 
 mod job_queue;
 use actix_web_actors::ws;
-use client_session::ClientWsSession;
 use job_queue::*;
 
 mod client_session;
+use client_session::ClientWsSession;
 mod worker_session;
+use worker_session::WorkerWsSession;
 
 use pytf_web::{
     authentication::{self, UserDB, LoginToken, UserCredentials},
-    pytf_config::{PytfConfig, AVAILABLE_MOLECULES, MoleculeResources}
+    pytf_config::{PytfConfig, AVAILABLE_MOLECULES, MoleculeResources}, pytf_frame::{ATOM_NAME_MAP, AtomNameMap}
 };
 
 const FRONTEND_ROOT: &'static str = "./pytf-viewer/build";
@@ -33,6 +34,7 @@ async fn index() -> impl Responder {
 
 #[post("/login")]
 async fn login(request: HttpRequest, credentials: web::Json<UserCredentials>) -> impl Responder {
+    println!("Received login request with credentials: {credentials:?}");
     if !authentication::USER_DB
         .get()
         .unwrap()
@@ -73,61 +75,67 @@ async fn socket(
     stream: web::Payload,
     srv: web::Data<Addr<JobServer>>,
 ) -> Result<HttpResponse, actix_web::Error> {
-    ws::start(
-        ClientWsSession::new(
-            user.id().unwrap(),
-            srv.get_ref().clone()
-        ),
-        &req,
-        stream,
-    )
-}
-
-#[post("/submit")]
-async fn submit(user: Identity, mut config: web::Json<PytfConfig>, job_queue: web::Data<JobQueue>) -> impl Responder {
-    println!("Received config: {config:?}");
-    config.canonicalize();
-    config.prefill();
-    // TODO:
-    // * Look up settings.name in hash map to get attached worker or choose a new one.
-    // * Send back worker's address
-    // * Keep track of which worker is working on what, and with what status (allocated, working, done)
-
-    println!("Processed config: {config:?}");
-    if let Some(_) = job_queue.request_job(config.into_inner(), user.id().unwrap()) {
-        job_queue.notify_workers();
-    }
-
-    HttpResponse::Ok() // TODO: Send web socket info? Or job name?
-}
-
-#[post("/cancel")]
-async fn cancel(user: Identity, job_queue: web::Data<JobQueue>) -> impl Responder {
-    let client = user.id().unwrap();
-    println!("Got cancel signal from {client}");
-    if job_queue.cancel_job(&user.id().unwrap()) {
-        return HttpResponse::Ok().finish()
+    let uid = user.id().unwrap();
+    if uid == "worker" {
+        ws::start(
+            WorkerWsSession::new(srv.get_ref().clone()),
+            &req,
+            stream,
+        )
     } else {
-        HttpResponse::NotModified().body("No job in queue for client")
+        ws::start(
+            ClientWsSession::new(uid, srv.get_ref().clone()),
+            &req,
+            stream,
+        )
     }
-
 }
+
+// #[post("/submit")]
+// async fn submit(user: Identity, mut config: web::Json<PytfConfig>, job_queue: web::Data<JobQueue>) -> impl Responder {
+//     println!("Received config: {config:?}");
+//     config.canonicalize();
+//     config.prefill();
+//     // TODO:
+//     // * Look up settings.name in hash map to get attached worker or choose a new one.
+//     // * Send back worker's address
+//     // * Keep track of which worker is working on what, and with what status (allocated, working, done)
+//
+//     println!("Processed config: {config:?}");
+//     if let Some(_) = job_queue.request_job(config.into_inner(), user.id().unwrap()) {
+//         job_queue.notify_workers();
+//     }
+//
+//     HttpResponse::Ok() // TODO: Send web socket info? Or job name?
+// }
+
+// #[post("/cancel")]
+// async fn cancel(user: Identity, job_queue: web::Data<JobQueue>) -> impl Responder {
+//     let client = user.id().unwrap();
+//     println!("Got cancel signal from {client}");
+//     if job_queue.cancel_job(&user.id().unwrap()) {
+//         return HttpResponse::Ok().finish()
+//     } else {
+//         HttpResponse::NotModified().body("No job in queue for client")
+//     }
+//
+// }
 
 #[get("/molecules")]
 async fn molecules(_user: Identity) -> impl Responder {
     HttpResponse::Ok().json(AVAILABLE_MOLECULES.get())
 }
 
-
-#[get("/get_work")]
-async fn get_work(user: Identity, job_queue: web::Data<JobQueue>) -> impl Responder {
-    // TODO:
-    //  * Allow workers to log in with a "worker" username
-    //  * Set their id to their address
-    //  * Store list of registered workers, check against it here before proceeding.
-    job_queue.assign_worker(user.id().unwrap());
-    HttpResponse::Ok()
-}
+//
+// #[get("/get_work")]
+// async fn get_work(user: Identity, job_queue: web::Data<JobQueue>) -> impl Responder {
+//     // TODO:
+//     //  * Allow workers to log in with a "worker" username
+//     //  * Set their id to their address
+//     //  * Store list of registered workers, check against it here before proceeding.
+//     job_queue.assign_worker(user.id().unwrap());
+//     HttpResponse::Ok()
+// }
 
 
 struct WorkerAllocation {
@@ -184,8 +192,8 @@ async fn main() -> std::io::Result<()> {
     //       - Set up RwLock<HashMap<Worker, String>> for keeping track of which config runs where
     //       - Forward on simulation requests and return worker address for web socket connection
 
-    let worker_allocation = web::Data::new(WorkerAllocation::new());
-    let job_queue = web::Data::new(JobQueue::new());
+    // let worker_allocation = web::Data::new(WorkerAllocation::new());
+    // let job_queue = web::Data::new(JobQueue::new());
 
     let job_server = JobServer::new().start();
 
@@ -219,8 +227,8 @@ async fn main() -> std::io::Result<()> {
             .service(logout)
             .service(user_token)
             .service(socket)
-            .service(submit)
-            .service(cancel)
+            // .service(submit)
+            // .service(cancel)
             .service(molecules)
             .service(Files::new("/", FRONTEND_ROOT))
     })
