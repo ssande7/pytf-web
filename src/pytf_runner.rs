@@ -42,7 +42,9 @@ impl Actor for PytfRunner {
         let run_id = self.pytf.run_id();
         if run_id < self.pytf.final_run_id() {
             match PytfPauseFiles::new(
-                &self.config.work_directory, &self.config.name, self.pytf.run_id() as usize
+                &self.config.work_directory,
+                &self.config.name,
+                self.pytf.last_finished_run()
             ).and_then(|p| Ok(p.pack()))
             {
                 Ok(Ok(pause_files)) =>
@@ -52,7 +54,10 @@ impl Actor for PytfRunner {
                             &pause_files
                         ].concat().into()
                     ))),
-                _ => self.send_failed(),
+                e => {
+                        eprintln!("Failed to pack pause data: {e:?}");
+                        self.send_failed();
+                    }
             };
         }
         actix::Running::Stop
@@ -77,22 +82,29 @@ pub struct PytfCycle {}
 /// Can be packed to `Bytes` to send over network, and unpacked when received.
 #[derive(Serialize, Deserialize)]
 pub struct PytfPauseFiles {
-    pub run_id: usize,
+    pub run_id: u32,
     pub log: String,
     pub coords: String,
 }
 
 impl PytfPauseFiles {
     /// Load pause file contents into memory
-    pub fn new<S: AsRef<str>>(workdir: S, jobname: S, jobid: usize) -> std::io::Result<Self> {
+    pub fn new<S: AsRef<str>>(workdir: S, jobname: S, jobid: u32) -> std::io::Result<Self> {
         let workdir = workdir.as_ref();
         let jobname = jobname.as_ref();
+
+        // Only need last 10 lines of log file, so disregard the rest
+        let log = std::fs::read_to_string(
+                PytfFile::Log.path(workdir, jobname, jobid)
+            )?;
+        let mut log = log.rsplit('\n').take(10).collect::<Vec<&str>>();
+        log.reverse();
+        let log = log.join("\n");
+
         // Package up log and final-coordinates files
         Ok(Self {
             run_id: jobid,
-            log: std::fs::read_to_string(
-                PytfFile::Log.path(workdir, jobname, jobid)
-            )?,
+            log,
             coords: std::fs::read_to_string(
                 PytfFile::FinalCoords.path(workdir, jobname, jobid)
             )?,
@@ -130,8 +142,7 @@ impl Handler<PytfStop> for PytfRunner {
     /// Received stop signal, so make sure it's for my current job and stop if so
     fn handle(&mut self, msg: PytfStop, ctx: &mut Self::Context) -> Self::Result {
         if msg.jobname.as_ref() == Some(&self.config.name) || msg.jobname.is_none() {
-            // TODO: pack pause data here if not finished??
-            ctx.stop();
+            ctx.stop(); // Pause data packed while stopping
         } else {
             println!("Received stop signal for different job: {}", msg.jobname.unwrap());
         }
@@ -146,11 +157,11 @@ impl Handler<PytfCycle> for PytfRunner {
             self.send_failed();
             return
         }
-        let run_id = self.pytf.run_id();
-        if run_id >= self.pytf.final_run_id() {
+        if self.pytf.run_id() >= self.pytf.final_run_id() {
             println!("Completed final cycle. Exiting.");
             self.send_done();
         } else {
+            let run_id = self.pytf.last_finished_run();
             println!("Completed cycle {run_id} successfully. Queing next cycle.");
 
             // Create trajectory packer to send out segment
@@ -159,7 +170,7 @@ impl Handler<PytfCycle> for PytfRunner {
                 SegToProcess::new(
                     self.config.work_directory.clone(),
                     self.config.name.clone(),
-                    run_id as u32
+                    run_id,
                 )
             );
 

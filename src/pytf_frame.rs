@@ -91,13 +91,20 @@ impl TrajectorySegment {
                 })
             );
             if out.len() != 12 + natoms { Err(anyhow!("Atoms missing from .gro file"))? }
+            println!("Extracted {natoms} atoms from .gro file to pack segment");
         }
         let mut nframes: u32 = 0;
         while let Ok(frame) = xtcfile.read_xtc(natoms) {
-            out.extend(frame.x.iter().flat_map(|xyz| xyz.0.map(|v| v.to_le_bytes()).concat()));
+            out.reserve(natoms * 12);
+            out.extend(frame.x.iter()
+                .flat_map(|xyz| xyz.0.map(
+                    |v| v.to_le_bytes()
+                )).flatten()
+            );
             nframes += 1;
         }
         out[4..8].copy_from_slice(&nframes.to_le_bytes());
+        println!("Wrote {nframes} frames to segment");
         Ok(Self { data: out.into() })
     }
 
@@ -142,22 +149,26 @@ impl SegmentProcessor {
 impl Handler<SegToProcess> for SegmentProcessor {
     type Result = anyhow::Result<()>;
     fn handle(&mut self, msg: SegToProcess, _ctx: &mut Self::Context) -> Self::Result {
-        let xtc_path = PytfFile::Trajectory.path(
-            &msg.workdir,
-            &msg.jobname,
-            msg.segment_id as usize
+        let xtc_path = format!("{}\0",
+            PytfFile::Trajectory.path(
+                &msg.workdir,
+                &msg.jobname,
+                msg.segment_id
+            )
         );
         let xtcfile = match XDRFile::<access_mode::Read>::open(
             unsafe {CStr::from_bytes_with_nul_unchecked(xtc_path.as_bytes()) })
         {
             Ok(xtcfile) => xtcfile,
-            Err(e) => return Err(anyhow!("{e:?}")),
+            Err(e) => {
+                return Err(anyhow!("{e:?}"))
+            }
         };
         let grofile = BufReader::new(
             File::open(PytfFile::InputCoords.path(
                 &msg.workdir,
                 &msg.jobname,
-                msg.segment_id as usize
+                msg.segment_id
             ))?
         );
         self.socket.do_send(WsMessage(ws::Message::Binary(

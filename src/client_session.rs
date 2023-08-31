@@ -147,8 +147,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
                 let text = text.trim();
                 if text == MSG_JOB_CANCEL {
                     println!("Received cancel signal for client {}", self.id);
-                    self.job = None;
-                    if let Some(job) = &self.job {
+                    if let Some(job) = self.job.take() {
                         job.write().unwrap().remove_client(&ctx.address());
                     }
                     println!("Done processing cancel for client {}", self.id);

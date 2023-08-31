@@ -210,9 +210,12 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WorkerWsSession {
                 if bytes.starts_with(PAUSE_HEADER) {
                     // Format is b"pause\0{jobname}\0{pause_data}"
                     let _ = bytes.split_to(PAUSE_HEADER.len());
-                    let Some(jobname) = split_nullterm_utf8_str(&mut bytes) else {
-                        eprintln!("Error reading jobname from pause data.");
-                        return;
+                    let jobname = match split_nullterm_utf8_str(&mut bytes) {
+                        Ok(jobname) => jobname,
+                        Err(e) => {
+                            eprintln!("Error reading jobname from pause data: {e}");
+                            return;
+                        }
                     };
                     if let Some(job) = &self.job {
                         {
@@ -242,9 +245,12 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WorkerWsSession {
                 } else if bytes.starts_with(SEGMENT_HEADER) {
                     // Format is b"seg\0{jobname}\0{segment_id: u32 little endian}{rest_of_frame_data}"
                     let _ = bytes.split_to(SEGMENT_HEADER.len());
-                    let Some(jobname) = split_nullterm_utf8_str(&mut bytes) else {
-                        eprintln!("Error reading jobname from frame.");
-                        return
+                    let jobname = match split_nullterm_utf8_str(&mut bytes) {
+                        Ok(jobname) => jobname,
+                        Err(e) => {
+                            eprintln!("Error reading jobname from segment data: {e}");
+                            return;
+                        }
                     };
                     // 4 bytes for segment id
                     if bytes.len() < 4 {

@@ -23,12 +23,13 @@ impl std::error::Error for PytfError {}
 #[derive(Debug)]
 pub struct Pytf {
     deposition: Py<PyAny>,
+    /// ID of the _next_ run to be performed
     run_id: i32,
     final_run_id: i32,
 }
 
 // TODO: make this a cfg switch
-const PYTF_DEBUG: bool = true;
+const PYTF_DEBUG: bool = cfg!(pytf_debug);
 
 impl Pytf {
     /// Create a PyThinFilm.deposition.Deposition object from a pytf config file
@@ -68,6 +69,10 @@ impl Pytf {
         self.run_id
     }
 
+    pub fn last_finished_run(&self) -> u32 {
+        if self.run_id > 0 { self.run_id as u32 - 1 } else { 0 }
+    }
+
     #[inline(always)]
     pub fn final_run_id(&self) -> i32 {
         self.final_run_id
@@ -100,10 +105,12 @@ impl PytfFile {
         }
     }
 
-    pub fn path(&self, workdir: impl AsRef<str>, jobname: impl AsRef<str>, run_id: usize) -> String {
+    pub fn path(&self, workdir: impl AsRef<str>, jobname: impl AsRef<str>, run_id: u32) -> String {
         let workdir = workdir.as_ref();
         let jobname = jobname.as_ref();
-        format!("{workdir}/{self}/{jobname}_{self}_{run_id}.{}", self.ext())
+        let out = format!("{workdir}/{self}/{jobname}_{self}_{run_id}.{}", self.ext());
+        println!("Generated path: {out}");
+        out
     }
 }
 impl Display for PytfFile {

@@ -279,6 +279,10 @@ impl Handler<WorkerConnect> for JobServer {
         println!("New worker connected");
         self.worker_sessions.push(msg.addr.clone());
         self.idle_workers.push(msg.addr);
+        println!("Currently have {} workers, {} of which are idle.",
+            self.worker_sessions.len(),
+            self.idle_workers.len()
+        );
     }
 }
 
@@ -286,13 +290,19 @@ impl Handler<WorkerDisconnect> for JobServer {
     type Result = ();
 
     fn handle(&mut self, msg: WorkerDisconnect, _ctx: &mut Self::Context) -> Self::Result {
-        let Some(idx) = self.worker_sessions.iter().rposition(|w| *w == msg.addr) else {
+        let Some(idx) = self.worker_sessions.iter().position(|w| *w == msg.addr) else {
             println!("Disconnect message received for unknown worker");
             return
         };
-        self.worker_sessions.swap_remove(idx);
-        println!("Removed disconnected worker from list of idle workers.\n\
-            Currently have {} workers idle.", self.idle_workers.len());
+        let _ = self.worker_sessions.swap_remove(idx);
+        if let Some(idx) = self.idle_workers.iter().position(|w| *w == msg.addr) {
+            let _ = self.idle_workers.swap_remove(idx);
+        };
+        println!("Removed disconnected worker.\n\
+            Currently have {} workers, of which {} are idle.",
+            self.worker_sessions.len(),
+            self.idle_workers.len()
+        );
     }
 }
 
@@ -349,7 +359,7 @@ impl JobInner {
     }
 
     pub fn remove_client(&mut self, client: &Addr<ClientWsSession>) {
-        let Some(client_idx) = self.clients.iter().rposition(|c| c == client) else {
+        let Some(client_idx) = self.clients.iter().position(|c| c == client) else {
             println!("Tried to remove client that wasn't attached");
             return
         };

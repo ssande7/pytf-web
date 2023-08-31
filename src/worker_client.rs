@@ -4,7 +4,7 @@ use actix::{prelude::*, io::{SinkWrite, WriteHandler}};
 use actix_codec::Framed;
 use anyhow::anyhow;
 use awc::{BoxedSocket, ws, error::WsProtocolError};
-use futures_util::stream::StreamExt;
+use futures_util::{stream::StreamExt, Future};
 use futures::stream::{SplitSink, SplitStream};
 
 use crate::{
@@ -78,11 +78,14 @@ impl PytfServer {
         let (sink, stream): (WsFramedSink, WsFramedStream) = socket.split();
         Ok(Self::create(|ctx| {
             ctx.add_stream(stream);
+            let addr = ctx.address();
             Self {
                 socket_sink: SinkWrite::new(sink, ctx),
                 heartbeat: Instant::now(),
                 worker: None,
-                segment_proc: SegmentProcessor::new(ctx.address()).start(),
+                segment_proc: spawn_on_arbiter(async move {
+                    SegmentProcessor::new(addr).start()
+                }).expect("Failed to spawn segment processor thread"),
             }
         }))
     }
@@ -102,22 +105,35 @@ impl PytfServer {
     /// Returns the previous worker if there was one and if the worker started successfully.
     fn start_worker(&mut self, config: PytfConfig, addr: Addr<Self>) -> anyhow::Result<Option<Addr<PytfRunner>>> {
         let runner = PytfRunner::new(config, addr, self.segment_proc.clone())?;
-        let arb = Arbiter::new();
-        let signal = Arc::new((Mutex::<Option<Addr<PytfRunner>>>::new(None), Condvar::new()));
-        let spawn_signal = signal.clone();
-        let lock = signal.0.lock().unwrap();
-        if arb.spawn(async move {
+        if let Some(worker) = spawn_on_arbiter(async move {
             let worker = runner.start();
             worker.do_send(PytfCycle {});
-            { *spawn_signal.0.lock().unwrap() = Some(worker); }
-            spawn_signal.1.notify_one();
+            worker
         }) {
-            let worker = signal.1.wait(lock).unwrap();
-            Ok(self.worker.replace(worker.clone().unwrap()))
+            Ok(self.worker.replace(worker))
         } else {
             Err(anyhow!("Failed to spawn worker"))
         }
     }
+}
+
+/// Create a new arbiter, execute a future on it to spawn a new actor,
+/// and return that actor's address
+fn spawn_on_arbiter<A: Actor, Fut>(func: Fut) -> Option<Addr<A>>
+where Fut: Future<Output = Addr<A>> + Send + 'static {
+    let signal = Arc::new((
+        Mutex::<Option<Addr<A>>>::new(None),
+        Condvar::new()
+    ));
+    let spawn_signal = signal.clone();
+    let lock = signal.0.lock().unwrap();
+    if Arbiter::new().spawn(async move {
+        let addr = func.await;
+        { *spawn_signal.0.lock().unwrap() = Some(addr); }
+        spawn_signal.1.notify_one();
+    }) {
+        signal.1.wait(lock).unwrap().clone()
+    } else { None }
 }
 
 #[derive(Message)]
@@ -174,7 +190,8 @@ impl WriteHandler<WsProtocolError> for PytfServer {}
 impl StreamHandler<Result<ws::Frame, awc::error::WsProtocolError>> for PytfServer {
     fn handle(&mut self, msg: Result<ws::Frame, awc::error::WsProtocolError>, ctx: &mut Self::Context) {
         let msg = match msg {
-            Err(_) => {
+            Err(e) => {
+                println!("Received erroneous message: {e}");
                 ctx.stop();
                 return;
             }
@@ -231,10 +248,12 @@ impl StreamHandler<Result<ws::Frame, awc::error::WsProtocolError>> for PytfServe
                 } else if bytes.starts_with(STEAL_HEADER) {
                     // Got existing job to continue from
                     let _ = bytes.split_to(STEAL_HEADER.len());
-                    let Some(config) = split_nullterm_utf8_str(&mut bytes)
-                    else {
-                        eprintln!("Failed to read config information from job to resume");
-                        return
+                    let config = match split_nullterm_utf8_str(&mut bytes) {
+                        Ok(config) => config,
+                        Err(e) => {
+                            eprintln!("Failed to read config information from job to resume: {e}");
+                            return
+                        }
                     };
                     let config: PytfConfig = match serde_json::from_str(&config) {
                         Ok(config) => config,
