@@ -1,4 +1,4 @@
-use std::{time::{Instant, Duration}, ops::{DerefMut, Deref}};
+use std::{time::{Instant, Duration}, ops::{DerefMut, Deref}, sync::{Mutex, Arc, Condvar}};
 
 use actix::{prelude::*, io::{SinkWrite, WriteHandler}};
 use actix_codec::Framed;
@@ -98,25 +98,44 @@ impl PytfServer {
         });
     }
 
-    /// Create a new `PytfRunner` worker and tell it to begin cycling.
-    /// Returns the previous worker if there was one.
+    /// Create a new `PytfRunner` worker in a new thread and tell it to begin cycling.
+    /// Returns the previous worker if there was one and if the worker started successfully.
     fn start_worker(&mut self, config: PytfConfig, addr: Addr<Self>) -> anyhow::Result<Option<Addr<PytfRunner>>> {
-        let worker = PytfRunner::new(config, addr, self.segment_proc.clone())?.start();
-        worker.do_send(PytfCycle {});
-        Ok(self.worker.replace(worker))
+        let runner = PytfRunner::new(config, addr, self.segment_proc.clone())?;
+        let arb = Arbiter::new();
+        let signal = Arc::new((Mutex::<Option<Addr<PytfRunner>>>::new(None), Condvar::new()));
+        let spawn_signal = signal.clone();
+        let lock = signal.0.lock().unwrap();
+        if arb.spawn(async move {
+            let worker = runner.start();
+            worker.do_send(PytfCycle {});
+            { *spawn_signal.0.lock().unwrap() = Some(worker); }
+            spawn_signal.1.notify_one();
+        }) {
+            let worker = signal.1.wait(lock).unwrap();
+            Ok(self.worker.replace(worker.clone().unwrap()))
+        } else {
+            Err(anyhow!("Failed to spawn worker"))
+        }
     }
-    // TODO: Use arbiter so worker runs in separate thread:
-    //    Need to get worker addr out from future to store it
-    //
-    // let runner = PytfRunner::new(config, addr, self.segment_proc.clone())?; if Arbiter::new().spawn(async {
-    //     let worker = runner.start();
-    //     worker.do_send(PytfCycle {});
-    // }) {
-    //     Ok(self.worker.take())
-    // } else {
-    //     Err(anyhow!("Failed to start worker thread"))
-    // }
 }
+
+#[derive(Message)]
+#[rtype(result="()")]
+struct NewWorker { worker: Addr<PytfRunner> }
+struct StartHandler {
+    worker: Option<Addr<PytfRunner>>,
+}
+impl Actor for StartHandler {
+    type Context = Context<Self>;
+}
+impl Handler<NewWorker> for StartHandler {
+    type Result = ();
+    fn handle(&mut self, msg: NewWorker, ctx: &mut Self::Context) -> Self::Result {
+        self.worker = Some(msg.worker);
+    }
+}
+
 
 
 /// Convenience wrapper around web socket message to be forwarded on to main server
@@ -184,7 +203,9 @@ impl StreamHandler<Result<ws::Frame, awc::error::WsProtocolError>> for PytfServe
                     };
                     let jobname = config.name.clone();
                     match self.start_worker(config, ctx.address()) {
-                        Ok(Some(old_worker)) => old_worker.do_send(PytfStop { jobname: None }),
+                        Ok(Some(old_worker)) => {
+                            old_worker.do_send(PytfStop { jobname: None })
+                        },
                         Ok(None) => (),
                         Err(e) => {
                             eprintln!("Failed to start new job {jobname}: {e}");
