@@ -2506,7 +2506,7 @@ checksum = "1a515f5799fe4961cb532f983ce2b23082366b898e52ffbce459c86f67c8378a"
 [[package]]
 name = "xdrfile"
 version = "0.1.0"
-source = "git+https://github.com/ssande7/libxdrfile-rs#523f80ce5449221fbfc1b65b88ff7bc9443a2299"
+source = "git+https://github.com/ssande7/libxdrfile-rs#b34c63f400497cd3fd8fe363c50f0c1e5428bef5"
 dependencies = [
  "cc",
  "cmake",

@@ -1,6 +1,9 @@
-use std::{sync::{Arc, Mutex, RwLock}, collections::HashMap};
+use std::{sync::{Arc, RwLock}, collections::HashMap};
 use actix::prelude::*;
-use pytf_web::{pytf_config::PytfConfig, pytf_frame::TrajectorySegment};
+use pytf_web::{
+    pytf_config::PytfConfig,
+    pytf_frame::TrajectorySegment
+};
 
 use crate::{
     client_session::{ClientWsSession, ClientForceDisconnect},
@@ -58,17 +61,17 @@ pub struct ClientDetails {
 #[rtype(result = "()")]
 pub struct AssignJobs {}
 
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct TrajectoryPacket {
-    jobname: Arc<String>,
-    pub bytes: Vec<u8>,
-}
-
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct JobFailed { jobname: String }
+// #[derive(Message)]
+// #[rtype(result = "()")]
+// pub struct TrajectoryPacket {
+//     jobname: Arc<String>,
+//     pub bytes: Vec<u8>,
+// }
+//
+//
+// #[derive(Message)]
+// #[rtype(result = "()")]
+// pub struct JobFailed { jobname: String }
 
 
 /// Server for connecting clients to workers and shuttling data
@@ -121,7 +124,7 @@ impl Actor for JobServer {
 impl Handler<ClientConnect> for JobServer {
     type Result = ();
 
-    fn handle(&mut self, msg: ClientConnect, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: ClientConnect, _ctx: &mut Self::Context) -> Self::Result {
         println!("Client {} connected", msg.id);
 
         if let Some(old_session) = self.client_sessions.insert(
@@ -141,7 +144,7 @@ impl Handler<ClientConnect> for JobServer {
 impl Handler<ClientDisconnect> for JobServer {
     type Result = ();
 
-    fn handle(&mut self, msg: ClientDisconnect, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: ClientDisconnect, _ctx: &mut Self::Context) -> Self::Result {
         self.client_sessions.remove(&msg.id);
         // TODO: cancel job if no clients left
     }
@@ -222,7 +225,7 @@ impl Handler<AssignJobs> for JobServer {
 impl Handler<ClientReqJob> for JobServer {
     type Result = Job;
 
-    fn handle(&mut self, msg: ClientReqJob, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: ClientReqJob, _ctx: &mut Self::Context) -> Self::Result {
         // Check whether job already exists.
         // Keep job_lookup locked while we work with it to avoid races
         // (i.e. we can only add one new job at a time)
@@ -367,25 +370,11 @@ impl JobInner {
         if self.clients.is_empty() {
             println!("Job with name {} is now empty.", self.config.name);
             if let JobStatus::Running(worker) = &self.status {
-                    worker.do_send(WorkerPause { jobname: self.config.name.clone() });
+                worker.do_send(WorkerPause { jobname: self.config.name.clone() });
                 self.status = JobStatus::Paused(worker.clone());
             }
         }
     }
-}
-
-
-
-
-
-#[derive(Debug, Clone)]
-pub struct JobQueue {
-    /// Main job storage, indexed by job name (which is unique)
-    job_lookup: Arc<Mutex<HashMap<String, Job>>>,
-    /// Map of which client cares about which job. Job in Mutex so it can be switched out
-    client_map: Arc<RwLock<HashMap<String, Arc<Mutex<Option<Job>>>>>>,
-    /// List of unfinished jobs - candidates for work requests
-    unfinished_jobs: Arc<RwLock<Vec<Job>>>,
 }
 
 /// Job assignment message. Worker returns `true` if job assigned successfully, `false` otherwise.

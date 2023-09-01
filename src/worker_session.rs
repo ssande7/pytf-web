@@ -143,6 +143,24 @@ impl Handler<JobAssignment> for WorkerWsSession {
                 job_lock.status = JobStatus::Running(ctx.address());
                 match serde_json::to_string(&job_lock.config) {
                     Ok(config) => {
+                        // Sanitize old job in case messages got jumbled (probably not needed)
+                        if let Some(old_job) = self.job.replace(job.clone()) {
+                            let mut old_job = old_job.write().unwrap();
+                            match &old_job.status {
+                                JobStatus::Running(addr) if *addr == ctx.address() => {
+                                    eprintln!("Assigned new job, but already had a running job. \
+                                        Marking as Paused and assuming pause data will come.");
+                                    old_job.status = JobStatus::Paused(addr.clone());
+                                }
+                                JobStatus::Stealing(data, addr) if *addr == ctx.address() => {
+                                    eprintln!("Assigned new job, but already stealing a job. \
+                                        Marking as Steal to be picked up by another worker.");
+                                    old_job.status = JobStatus::Steal(data.clone());
+                                    self.job_server.do_send(AssignJobs {});
+                                }
+                                _ => (),
+                            };
+                        }
                         ctx.binary([JOB_HEADER, config.as_bytes()].concat());
                         println!("Sent new job to worker");
                         true
@@ -159,6 +177,24 @@ impl Handler<JobAssignment> for WorkerWsSession {
                 job_lock.status = JobStatus::Stealing(data.clone(), ctx.address());
                 match serde_json::to_string(&job_lock.config) {
                     Ok(config) => {
+                        // Sanitize old job in case messages got jumbled (probably not needed)
+                        if let Some(old_job) = self.job.replace(job.clone()) {
+                            let mut old_job = old_job.write().unwrap();
+                            match &old_job.status {
+                                JobStatus::Running(addr) if *addr == ctx.address() => {
+                                    eprintln!("Assigned job to steal, but already had a running job. \
+                                        Marking as Paused and assuming pause data will come.");
+                                    old_job.status = JobStatus::Paused(addr.clone());
+                                }
+                                JobStatus::Stealing(data, addr) if *addr == ctx.address() => {
+                                    eprintln!("Assigned job to steal, but already stealing a job. \
+                                        Marking as Steal to be picked up by another worker.");
+                                    old_job.status = JobStatus::Steal(data.clone());
+                                    self.job_server.do_send(AssignJobs {});
+                                }
+                                _ => (),
+                            };
+                        }
                         ctx.binary([STEAL_HEADER, config.as_bytes(), b"\0", data.data.as_ref()].concat());
                         println!("Sent resume job to worker");
                         true
@@ -225,19 +261,22 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WorkerWsSession {
                                 return
                             }
                         }
-                        let mut job = job.write().unwrap();
-                        match &job.status {
-                            JobStatus::Paused(addr) if *addr == ctx.address() => {
-                                job.status = JobStatus::Steal(PausedJobData {
-                                    data: bytes,
-                                });
-                            }
-                            _ => {
-                                eprintln!(
-                                    "Job {} in unexpected state when trying to set up for stealing: {:?}",
-                                    jobname, job.status);
+                        {
+                            let mut job = job.write().unwrap();
+                            match &job.status {
+                                JobStatus::Paused(addr) if *addr == ctx.address() => {
+                                    job.status = JobStatus::Steal(PausedJobData {
+                                        data: bytes,
+                                    });
+                                }
+                                _ => {
+                                    eprintln!(
+                                        "Job {} in unexpected state when trying to set up for stealing: {:?}",
+                                        jobname, job.status);
+                                }
                             }
                         }
+                        self.job = None;
                     } else {
                         eprintln!("Got pause data, but don't have a job!");
                     }

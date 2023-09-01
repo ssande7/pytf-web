@@ -178,7 +178,6 @@ impl DerefMut for WsMessage {
 impl Handler<WsMessage> for PytfServer {
     type Result = ();
     fn handle(&mut self, msg: WsMessage, _ctx: &mut Self::Context) -> Self::Result {
-        println!("Forwarding message: {:?}", msg.0);
         if let Err(e) = self.socket_sink.write(msg.0) {
             eprintln!("WARNING: Failed to send message: {e:?}")
         }

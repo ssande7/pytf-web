@@ -68,6 +68,10 @@ async fn user_token(user: Identity) -> impl Responder {
     HttpResponse::Ok().json(LoginToken::from(user_id))
 }
 
+/// Need to be able to send large messages.
+/// Expecting around 5MB, but could be larger.
+pub const WS_FRAME_SIZE_LIMIT: usize = 25*1024*1024;
+
 #[get("/socket")]
 async fn socket(
     req: HttpRequest,
@@ -77,17 +81,17 @@ async fn socket(
 ) -> Result<HttpResponse, actix_web::Error> {
     let uid = user.id().unwrap();
     if uid == "worker" {
-        ws::start(
+        ws::WsResponseBuilder::new(
             WorkerWsSession::new(srv.get_ref().clone()),
             &req,
             stream,
-        )
+        ).frame_size(WS_FRAME_SIZE_LIMIT).start()
     } else {
-        ws::start(
+        ws::WsResponseBuilder::new(
             ClientWsSession::new(uid, srv.get_ref().clone()),
             &req,
             stream,
-        )
+        ).frame_size(WS_FRAME_SIZE_LIMIT).start()
     }
 }
 

@@ -109,7 +109,6 @@ impl PytfFile {
         let workdir = workdir.as_ref();
         let jobname = jobname.as_ref();
         let out = format!("{workdir}/{self}/{jobname}_{self}_{run_id}.{}", self.ext());
-        println!("Generated path: {out}");
         out
     }
 }

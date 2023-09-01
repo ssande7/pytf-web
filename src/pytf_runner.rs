@@ -126,12 +126,19 @@ impl PytfPauseFiles {
 
     /// Write pause files to disk ready to be resumed from
     pub fn to_disk(&self, workdir: impl AsRef<str>, jobname: impl AsRef<str>) -> std::io::Result<()> {
+        std::fs::create_dir_all(format!("{}/{}", workdir.as_ref(), PytfFile::Log))?;
+        std::fs::create_dir_all(format!("{}/{}", workdir.as_ref(), PytfFile::FinalCoords))?;
+        std::fs::create_dir_all(format!("{}/{}", workdir.as_ref(), PytfFile::InputCoords))?;
         File::options().write(true).create(true)
             .open(PytfFile::Log.path(&workdir, &jobname, self.run_id))?
             .write(&self.log.as_bytes())?;
         File::options().write(true).create(true)
             .open(PytfFile::FinalCoords.path(&workdir, &jobname, self.run_id))?
             .write(&self.coords.as_bytes())?;
+        // Input coordinates file of this run just needs to exist
+        File::options().append(true).create(true)
+            .open(PytfFile::InputCoords.path(&workdir, &jobname, self.run_id))?
+            .write(b"")?;
         Ok(())
     }
 }

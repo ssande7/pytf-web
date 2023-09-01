@@ -96,15 +96,18 @@ impl TrajectorySegment {
         let mut nframes: u32 = 0;
         while let Ok(frame) = xtcfile.read_xtc(natoms) {
             out.reserve(natoms * 12);
-            out.extend(frame.x.iter()
-                .flat_map(|xyz| xyz.0.map(
-                    |v| v.to_le_bytes()
-                )).flatten()
-            );
+            let f: Vec<u8> = frame.x
+                .iter()
+                .flat_map(|xyz| xyz.0.iter().map(|x| x.to_le_bytes()))
+                .flatten().collect();
+            out.extend_from_slice(&f);
             nframes += 1;
         }
         out[4..8].copy_from_slice(&nframes.to_le_bytes());
-        println!("Wrote {nframes} frames to segment");
+        println!("Wrote {nframes} frames to segment. Expected size: {}, actual size: {}",
+            12 + natoms + (nframes as usize * natoms * 12),
+            out.len()
+        );
         Ok(Self { data: out.into() })
     }
 
