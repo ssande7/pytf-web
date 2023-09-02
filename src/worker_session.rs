@@ -10,11 +10,19 @@ use pytf_web::{
         JOB_HEADER,
         PAUSE_HEADER,
         STEAL_HEADER,
-        SEGMENT_HEADER,
+        SEGMENT_HEADER, RESUME_HEADER,
     }, split_nullterm_utf8_str
 };
 
-use crate::{job_queue::{Job, JobServer, WorkerConnect, WorkerDisconnect, JobAssignment, JobStatus, PausedJobData, AssignJobs}, client_session::{JobFailed, TrajectoryPing}};
+use crate::{
+    job_queue::{
+        Job, JobServer, AssignJobs,
+        WorkerConnect, WorkerDisconnect,
+        JobAssignment, JobStatus,
+        PausedJobData, UnhandledTrajectorySegment, AddSegmentResult, job_add_seg_and_notify
+    },
+    client_session::{JobFailed, TrajectoryPing}
+};
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
 
@@ -38,6 +46,8 @@ const WORKER_TIMEOUT: Duration = Duration::from_secs(90);
 * binary(b"fail\0{jobname}") => Job has failed
 *
 * binary(b"seg\0{jobname}\0{segment_data}") => segment of trajectory
+*
+* binary(b"resume\n{jobname}") => Successfully resumed job
 *
 */
 
@@ -230,7 +240,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WorkerWsSession {
             Ok(msg) => msg,
         };
 
-        println!("Worker session received message: {msg:?}");
         match msg {
             ws::Message::Ping(msg) => {
                 self.heartbeat = Instant::now();
@@ -244,6 +253,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WorkerWsSession {
             }
             ws::Message::Binary(mut bytes) => {
                 if bytes.starts_with(PAUSE_HEADER) {
+                    println!("Worker session received pause data");
                     // Format is b"pause\0{jobname}\0{pause_data}"
                     let _ = bytes.split_to(PAUSE_HEADER.len());
                     let jobname = match split_nullterm_utf8_str(&mut bytes) {
@@ -282,6 +292,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WorkerWsSession {
                     }
 
                 } else if bytes.starts_with(SEGMENT_HEADER) {
+                    println!("Worker session received segment data");
                     // Format is b"seg\0{jobname}\0{segment_id: u32 little endian}{rest_of_frame_data}"
                     let _ = bytes.split_to(SEGMENT_HEADER.len());
                     let jobname = match split_nullterm_utf8_str(&mut bytes) {
@@ -300,35 +311,14 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WorkerWsSession {
                     let segment_id = u32::from_le_bytes(bytes[..4].as_ref().try_into().unwrap()) as usize;
                     let segment = TrajectorySegment::new(bytes);
                     if let Some(job) = &self.job {
-                        {
-                            let job = job.read().unwrap();
-                            if job.config.name != jobname {
-                                println!("Received frame data for different job. Expected {jobname}, got {}", job.config.name);
-                                // TODO: Find that job? This could happen when one job is replaced
-                                // with another, but finishes its current segment before exiting.
-                                // self.job_server.do_send(segment);
-                                return
-                            }
-                            if segment_id >= job.frames.len() {
-                                println!("Received segment ID of {segment_id} beyond end of expected segments ({})", job.frames.len());
-                                return
-                            }
+                        if let AddSegmentResult::WrongJob(seg) = job_add_seg_and_notify(job, jobname, segment_id, segment) {
+                            self.job_server.do_send(seg);
                         }
-                        {
-                            let mut job = job.write().unwrap();
-                            if job.frames[segment_id].replace(segment).is_some() {
-                                println!("WARNING: Received duplicate of segment {segment_id} for trajectory {jobname}");
-                            }
-                        }
-                        {
-                            // Ping clients interested in job about new trajectory frame
-                            let job = job.read().unwrap();
-                            for client in &job.clients {
-                                client.do_send(TrajectoryPing {});
-                            }
-                        }
+                    } else {
+                        self.job_server.do_send(UnhandledTrajectorySegment{ jobname, segment_id, segment });
                     }
                 } else if bytes.starts_with(FAILED_HEADER) {
+                    println!("Worker session received fail message");
                     let _ = bytes.split_to(FAILED_HEADER.len());
                     let jobname = match str::from_utf8(&bytes) {
                         Ok(jobname) => jobname,
@@ -353,10 +343,34 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WorkerWsSession {
                         for client in clients {
                             client.do_send(JobFailed { jobname: jobname.to_owned(), });
                         }
-                        // TODO: Tell server this worker is idle
+                        // TODO: add worker back to idle list
+                        self.job_server.do_send(AssignJobs {});
                     }
                 } else if bytes.starts_with(DONE_HEADER) {
-                    // TODO: Mark job as done and tell server this worker is idle
+                    {
+                        // TODO: Mark job as done and
+                        // add worker to idle list
+                    }
+                    self.job_server.do_send(AssignJobs {});
+                } else if bytes.starts_with(RESUME_HEADER) {
+                    let _ = bytes.split_to(RESUME_HEADER.len());
+                    let jobname = match str::from_utf8(&bytes) {
+                        Ok(jobname) => jobname,
+                        Err(e) => {
+                            eprintln!("Error reading failed jobname: {e}");
+                            return
+                        }
+                    };
+                    if let Some(job) = &self.job {
+                        let mut job = job.write().unwrap();
+                        if job.config.name == jobname {
+                            if let JobStatus::Stealing(..) = job.status {
+                                job.status = JobStatus::Running(ctx.address());
+                            }
+                        } else {
+                            println!("Received resume message for different job!");
+                        }
+                    }
                 } else {
                     println!("Received unknown message!");
                 }

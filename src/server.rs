@@ -1,5 +1,3 @@
-use std::{collections::HashMap, sync::RwLock};
-
 use actix::{Addr, Actor};
 use actix_cors::Cors;
 use actix_files::{Files, NamedFile};
@@ -21,7 +19,8 @@ use worker_session::WorkerWsSession;
 
 use pytf_web::{
     authentication::{self, UserDB, LoginToken, UserCredentials},
-    pytf_config::{PytfConfig, AVAILABLE_MOLECULES, MoleculeResources}, pytf_frame::{ATOM_NAME_MAP, AtomNameMap}
+    pytf_config::{AVAILABLE_MOLECULES, MoleculeResources},
+    pytf_frame::WS_FRAME_SIZE_LIMIT
 };
 
 const FRONTEND_ROOT: &'static str = "./pytf-viewer/build";
@@ -68,10 +67,6 @@ async fn user_token(user: Identity) -> impl Responder {
     HttpResponse::Ok().json(LoginToken::from(user_id))
 }
 
-/// Need to be able to send large messages.
-/// Expecting around 5MB, but could be larger.
-pub const WS_FRAME_SIZE_LIMIT: usize = 25*1024*1024;
-
 #[get("/socket")]
 async fn socket(
     req: HttpRequest,
@@ -95,84 +90,10 @@ async fn socket(
     }
 }
 
-// #[post("/submit")]
-// async fn submit(user: Identity, mut config: web::Json<PytfConfig>, job_queue: web::Data<JobQueue>) -> impl Responder {
-//     println!("Received config: {config:?}");
-//     config.canonicalize();
-//     config.prefill();
-//     // TODO:
-//     // * Look up settings.name in hash map to get attached worker or choose a new one.
-//     // * Send back worker's address
-//     // * Keep track of which worker is working on what, and with what status (allocated, working, done)
-//
-//     println!("Processed config: {config:?}");
-//     if let Some(_) = job_queue.request_job(config.into_inner(), user.id().unwrap()) {
-//         job_queue.notify_workers();
-//     }
-//
-//     HttpResponse::Ok() // TODO: Send web socket info? Or job name?
-// }
-
-// #[post("/cancel")]
-// async fn cancel(user: Identity, job_queue: web::Data<JobQueue>) -> impl Responder {
-//     let client = user.id().unwrap();
-//     println!("Got cancel signal from {client}");
-//     if job_queue.cancel_job(&user.id().unwrap()) {
-//         return HttpResponse::Ok().finish()
-//     } else {
-//         HttpResponse::NotModified().body("No job in queue for client")
-//     }
-//
-// }
-
 #[get("/molecules")]
 async fn molecules(_user: Identity) -> impl Responder {
     HttpResponse::Ok().json(AVAILABLE_MOLECULES.get())
 }
-
-//
-// #[get("/get_work")]
-// async fn get_work(user: Identity, job_queue: web::Data<JobQueue>) -> impl Responder {
-//     // TODO:
-//     //  * Allow workers to log in with a "worker" username
-//     //  * Set their id to their address
-//     //  * Store list of registered workers, check against it here before proceeding.
-//     job_queue.assign_worker(user.id().unwrap());
-//     HttpResponse::Ok()
-// }
-
-
-struct WorkerAllocation {
-    /// Keep track of which job each worker is working on
-    workers: RwLock<HashMap<String, Option<Job>>>,
-}
-
-impl WorkerAllocation {
-    pub fn new() -> Self {
-        let mut args = std::env::args();
-        let mut workers = None;
-        while let Some(arg) = args.next() {
-            if arg == "-w" || arg == "--workers" {
-                let mut worker_hash = HashMap::with_capacity(args.len());
-                while let Some(worker) = args.next() {
-                    if worker_hash.insert(worker.clone(), None).is_some() {
-                        eprintln!("WARNING: Got duplicate worker address: {worker}");
-                    }
-                }
-                workers = Some(worker_hash);
-                break;
-            }
-        }
-        let workers = workers.unwrap_or_else(|| {
-            eprintln!("WARNING: No worker addresses specified!");
-            HashMap::new()
-        });
-        Self { workers: RwLock::new(workers) }
-    }
-
-}
-
-
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -192,13 +113,6 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Could not connect to redis-server");
 
-    // TODO: - Read in list of worker addresses/ports
-    //       - Set up RwLock<HashMap<Worker, String>> for keeping track of which config runs where
-    //       - Forward on simulation requests and return worker address for web socket connection
-
-    // let worker_allocation = web::Data::new(WorkerAllocation::new());
-    // let job_queue = web::Data::new(JobQueue::new());
-
     let job_server = JobServer::new().start();
 
     HttpServer::new(move || {
@@ -212,8 +126,6 @@ async fn main() -> std::io::Result<()> {
             ])
             .max_age(3600);
         App::new()
-            // .app_data(worker_allocation.clone())
-            // .app_data(job_queue.clone())
             .app_data(web::Data::new(job_server.clone()))
             .wrap(
                 IdentityMiddleware::builder()
@@ -231,8 +143,6 @@ async fn main() -> std::io::Result<()> {
             .service(logout)
             .service(user_token)
             .service(socket)
-            // .service(submit)
-            // .service(cancel)
             .service(molecules)
             .service(Files::new("/", FRONTEND_ROOT))
     })

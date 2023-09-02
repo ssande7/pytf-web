@@ -5,10 +5,10 @@ insert_distance: 2.0 #nm
 escape_tolerance: 2.0 #nm
 time_step: 0.0025 #ps
 density_fraction_cutoff: 0.05
-overhead_void_space: 5.0 # nm (TODO: maybe write this to avoid duplicating it in worker calculations?)
+overhead_void_space: 12.0 # nm (TODO: maybe write this to avoid duplicating it in worker calculations?)
 use_gpu : False
 description: "Vacuum deposition test"
-nstout: 50
+nstout: 100
 insertions_per_run: 3
 insertion_xy_radius: 0.8 #nm
 insertion_z_radius: 1.0 #nm

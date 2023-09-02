@@ -6,7 +6,7 @@ use pytf_web::{
 };
 
 use crate::{
-    client_session::{ClientWsSession, ClientForceDisconnect},
+    client_session::{ClientWsSession, ClientForceDisconnect, TrajectoryPing},
     worker_session::{WorkerWsSession, WorkerPause}
 };
 
@@ -102,7 +102,8 @@ impl JobServer {
             config: PytfConfig::default(),
             status: JobStatus::Finished,
             clients: Vec::with_capacity(32),
-            frames: Vec::new(),
+            segments: Vec::new(),
+            latest_segment: 0, // TODO: make this 1 and store empty system?
         };
         let null_name = null_job.config.name.clone();
         job_lookup.insert(null_name, null_job.wrap());
@@ -191,8 +192,7 @@ impl Handler<AssignJobs> for JobServer {
             // Try sending jobs to an idle worker until it accepts one or we run out of jobs
             self.assignment_handler.reset();
             while let Some(job) = unassigned_jobs.next() {
-                println!("Trying to assign job: {job:?}");
-                // let res = w.do_send(JobAssignment { job: job.clone(), });
+                println!("Trying to assign job");
                 self.assignment_handler.reset();
                 w.send(JobAssignment { job: job.clone(), })
                     .into_actor(self)
@@ -249,6 +249,10 @@ impl Handler<ClientReqJob> for JobServer {
                 println!("Finished cleaning up after {}", msg.client_id);
             } // NOTE: Assuming client_map can't get out of sync. Might need a test here if it can.
             println!("Returning job handle");
+            // Ping the client to let them know there are already frames available
+            msg.client_addr.do_send(TrajectoryPing {
+                latest_segment: job_lock.latest_segment,
+            });
             job.clone()
         } else {
             // Create new job and attach client
@@ -257,7 +261,8 @@ impl Handler<ClientReqJob> for JobServer {
             clients.push(msg.client_addr.clone());
             // Each frame pack is one cycle worth of data
             let new_job = JobInner {
-                frames: vec![None; msg.config.n_cycles],
+                segments: vec![None; msg.config.n_cycles],
+                latest_segment: 0,
                 config: msg.config,
                 status: JobStatus::Waiting,
                 clients,
@@ -278,7 +283,7 @@ impl Handler<ClientReqJob> for JobServer {
 impl Handler<WorkerConnect> for JobServer {
     type Result = ();
 
-    fn handle(&mut self, msg: WorkerConnect, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: WorkerConnect, ctx: &mut Self::Context) -> Self::Result {
         println!("New worker connected");
         self.worker_sessions.push(msg.addr.clone());
         self.idle_workers.push(msg.addr);
@@ -286,6 +291,7 @@ impl Handler<WorkerConnect> for JobServer {
             self.worker_sessions.len(),
             self.idle_workers.len()
         );
+        ctx.address().do_send(AssignJobs {});
     }
 }
 
@@ -309,13 +315,32 @@ impl Handler<WorkerDisconnect> for JobServer {
     }
 }
 
+#[derive(Debug, Message, PartialEq, Eq)]
+#[rtype(result="()")]
+pub struct UnhandledTrajectorySegment {
+    pub jobname: String,
+    pub segment_id: usize,
+    pub segment: TrajectorySegment,
+}
+
+impl Handler<UnhandledTrajectorySegment> for JobServer {
+    type Result = ();
+    fn handle(&mut self, msg: UnhandledTrajectorySegment, _ctx: &mut Self::Context) -> Self::Result {
+        if let Some(job) = self.job_lookup.get(&msg.jobname) {
+            if AddSegmentResult::Ok != job_add_seg_and_notify(job, &msg.jobname, msg.segment_id, msg.segment) {
+                eprintln!("Failed to store data for segment {} of job {}", msg.segment_id, msg.jobname);
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct JobInner {
     pub config: PytfConfig,
     pub status: JobStatus,
     pub clients: Vec<Addr<ClientWsSession>>,
-    pub frames: Vec<Option<TrajectorySegment>>,
+    pub segments: Vec<Option<TrajectorySegment>>,
+    pub latest_segment: usize,
 }
 pub type Job = Arc<RwLock<JobInner>>;
 
@@ -375,6 +400,62 @@ impl JobInner {
             }
         }
     }
+
+    /// Add a segment for `segment_id` if `expected_name` matches this job's name
+    pub fn add_segment(&mut self, expected_name: impl AsRef<str>, segment_id: usize, segment: TrajectorySegment)
+    -> AddSegmentResult {
+        let jobname = expected_name.as_ref();
+        if self.config.name != jobname {
+            println!("Received frame data for different job. Expected {jobname}, got {}", self.config.name);
+            // TODO: Find that job? This could happen when one job is replaced
+            // with another, but finishes its current segment before exiting.
+            return AddSegmentResult::WrongJob(UnhandledTrajectorySegment { jobname: jobname.to_string(), segment_id, segment });
+        }
+        if segment_id > self.segments.len() {
+            println!("Received segment ID of {segment_id} beyond end of expected segments ({})", self.segments.len());
+            return AddSegmentResult::IdTooLarge;
+        }
+        // segment_id is 1-based
+        if self.segments[segment_id - 1].replace(segment).is_some() {
+            println!("WARNING: Received duplicate of segment {segment_id} for trajectory {}", self.config.name);
+        } else {
+            println!("Stored segment {segment_id} for job {}", self.config.name);
+        }
+        if segment_id > self.latest_segment {
+            self.latest_segment = segment_id;
+            println!("Latest segment updated for job {}.", self.config.name);
+        }
+        AddSegmentResult::Ok
+    }
+
+    /// Ping clients interested in job about new trajectory frame
+    pub fn notify_clients(&self) {
+        for client in &self.clients {
+            client.do_send(TrajectoryPing {
+                latest_segment: self.latest_segment,
+            });
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum AddSegmentResult {
+    Ok,
+    WrongJob(UnhandledTrajectorySegment),
+    IdTooLarge,
+}
+
+pub fn job_add_seg_and_notify(job: &Job, expected_name: impl AsRef<str>, segment_id: usize, segment: TrajectorySegment)
+-> AddSegmentResult {
+    let out = {
+        let mut job = job.write().unwrap();
+        job.add_segment(expected_name, segment_id, segment)
+    };
+    if out == AddSegmentResult::Ok {
+        let job = job.read().unwrap();
+        job.notify_clients();
+    }
+    out
 }
 
 /// Job assignment message. Worker returns `true` if job assigned successfully, `false` otherwise.

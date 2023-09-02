@@ -11,6 +11,8 @@ const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /** MESSAGES TO CLIENT
+* text("new_frames") => There might be more frames available for current config
+*
 * text("failed") => Job has failed - try a different configuration.
 *
 * text("done") => Job has completed successfully.
@@ -19,6 +21,7 @@ const CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
 *
 */
 
+const MSG_NEW_FRAMES: &str = "new_frames";
 const MSG_JOB_FAILED: &str = "failed";
 const MSG_JOB_DONE:   &str = "done";
 
@@ -134,7 +137,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
             Ok(msg) => msg,
         };
 
-        println!("Client session received message: {msg:?}");
         match msg {
             ws::Message::Ping(msg) => {
                 self.heartbeat = Instant::now();
@@ -152,6 +154,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
                     }
                     println!("Done processing cancel for client {}", self.id);
                 } else if let Ok(config) = serde_json::from_str::<PytfConfigMinimal>(&text) {
+                    println!("Received job config from client {}:\n{config:?}", self.id);
                     self.job_server.send(ClientReqJob {
                         config: config.into(),
                         client_id: self.id.clone(),
@@ -171,16 +174,22 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
                     })
                     .wait(ctx);
                 } else if let Ok(segment_id) = text.parse::<usize>() {
+                    println!("Received request for segment {segment_id} from client {}: {text}", self.id);
                     // Client requesting data from frame with specified id
                     if let Some(job) = &self.job {
                         let job = job.read().unwrap();
-                        let next_id = segment_id + 1;
-                        if next_id < job.frames.len(){
-                            if let Some(frame) = &job.frames[segment_id] {
+                        if segment_id <= job.segments.len(){
+                            if let Some(frame) = &job.segments[segment_id.saturating_sub(1)] {
+                                println!("Sending segment {segment_id} to client {}", self.id);
                                 ctx.binary(frame.data());
+                            } else {
+                                println!("Client requested segment {segment_id} which is not available.");
+                                ctx.text(format!("no_seg{}", segment_id));
                             }
                         }
                     }
+                } else {
+                    println!("Received unknown message from client {}", self.id);
                 }
             }
             ws::Message::Binary(_) => println!("Unexpected binary from client {}", self.id),
@@ -198,15 +207,15 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
 
 #[derive(Message)]
 #[rtype(result="()")]
-pub struct TrajectoryPing {}
+pub struct TrajectoryPing {
+    pub latest_segment: usize,
+}
 
-// Trajectory data to send back to client
 impl Handler<TrajectoryPing> for ClientWsSession {
     type Result = ();
-
+    /// Notify client of possible extra trajectory data
     fn handle(&mut self, msg: TrajectoryPing, ctx: &mut Self::Context) -> Self::Result {
-        // TODO: Check job for new data to stream out
-        ctx.text("new_frames"); // Notify client of new frames available
+        ctx.text(format!("{MSG_NEW_FRAMES}{}", msg.latest_segment));
     }
 }
 
@@ -220,12 +229,14 @@ pub struct JobFailed {
 
 impl Handler<JobFailed> for ClientWsSession {
     type Result = ();
-
+    /// Notify client that job has failed
     fn handle(&mut self, msg: JobFailed, ctx: &mut Self::Context) -> Self::Result {
         if let Some(job) = &self.job {
             if job.read().unwrap().config.name == msg.jobname {
-                ctx.text("failed");
+                ctx.text(MSG_JOB_FAILED);
             }
         }
     }
 }
+
+// TODO: handle JobDone

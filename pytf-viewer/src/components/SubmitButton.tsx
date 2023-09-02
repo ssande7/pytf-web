@@ -8,30 +8,26 @@ interface ISubmitButton {
   config: PytfConfig,
   running: boolean,
   setRunning: React.Dispatch<React.SetStateAction<boolean>>,
+  waiting: boolean,
+  setWaiting: React.Dispatch<React.SetStateAction<boolean>>,
+  resetTrajectory: () => void,
 }
 
 const SubmitButton: React.FC<ISubmitButton> =
-  ({socket, socket_connected, config, running, setRunning}: ISubmitButton) =>
+  ({socket, socket_connected, config, running, setRunning, waiting, setWaiting, resetTrajectory}: ISubmitButton) =>
 {
-  const [waiting, setWaiting] = useState(false);
   const submitComposition = async () => {
     // Do nothing without web socket connection
     if (!socket.current) return;
 
     setWaiting(true);
     if (running) {
-      // fetch("/cancel", {method: "post"});
+      console.log("Sending cancel")
       socket.current.send("cancel");
     } else {
-      console.log("Sending config: " + JSON.stringify(config))
-      // fetch("/submit", {
-      //   method: "post",
-      //   headers: {
-      //     'Content-Type': 'application/json'
-      //   },
-      //   body: JSON.stringify(config)
-      // });
+      console.log("Sending config")
       socket.current.send(JSON.stringify(config));
+      resetTrajectory();
     }
     setWaiting(false);
     setRunning(!running);

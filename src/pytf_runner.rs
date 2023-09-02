@@ -82,20 +82,23 @@ pub struct PytfCycle {}
 /// Can be packed to `Bytes` to send over network, and unpacked when received.
 #[derive(Serialize, Deserialize)]
 pub struct PytfPauseFiles {
-    pub run_id: u32,
+    /// Segment ID number (cycle number within job)
+    pub segment_id: u32,
+    /// Final 10 lines of the log file
     pub log: String,
+    /// Contents of the final-coordinates file
     pub coords: String,
 }
 
 impl PytfPauseFiles {
     /// Load pause file contents into memory
-    pub fn new<S: AsRef<str>>(workdir: S, jobname: S, jobid: u32) -> std::io::Result<Self> {
+    pub fn new<S: AsRef<str>>(workdir: S, jobname: S, segment_id: u32) -> std::io::Result<Self> {
         let workdir = workdir.as_ref();
         let jobname = jobname.as_ref();
 
         // Only need last 10 lines of log file, so disregard the rest
         let log = std::fs::read_to_string(
-                PytfFile::Log.path(workdir, jobname, jobid)
+                PytfFile::Log.path(workdir, jobname, segment_id)
             )?;
         let mut log = log.rsplit('\n').take(10).collect::<Vec<&str>>();
         log.reverse();
@@ -103,10 +106,10 @@ impl PytfPauseFiles {
 
         // Package up log and final-coordinates files
         Ok(Self {
-            run_id: jobid,
+            segment_id,
             log,
             coords: std::fs::read_to_string(
-                PytfFile::FinalCoords.path(workdir, jobname, jobid)
+                PytfFile::FinalCoords.path(workdir, jobname, segment_id)
             )?,
         })
 
@@ -130,14 +133,14 @@ impl PytfPauseFiles {
         std::fs::create_dir_all(format!("{}/{}", workdir.as_ref(), PytfFile::FinalCoords))?;
         std::fs::create_dir_all(format!("{}/{}", workdir.as_ref(), PytfFile::InputCoords))?;
         File::options().write(true).create(true)
-            .open(PytfFile::Log.path(&workdir, &jobname, self.run_id))?
+            .open(PytfFile::Log.path(&workdir, &jobname, self.segment_id))?
             .write(&self.log.as_bytes())?;
         File::options().write(true).create(true)
-            .open(PytfFile::FinalCoords.path(&workdir, &jobname, self.run_id))?
+            .open(PytfFile::FinalCoords.path(&workdir, &jobname, self.segment_id))?
             .write(&self.coords.as_bytes())?;
         // Input coordinates file of this run just needs to exist
         File::options().append(true).create(true)
-            .open(PytfFile::InputCoords.path(&workdir, &jobname, self.run_id))?
+            .open(PytfFile::InputCoords.path(&workdir, &jobname, self.segment_id))?
             .write(b"")?;
         Ok(())
     }

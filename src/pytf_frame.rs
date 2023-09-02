@@ -11,6 +11,10 @@ use crate::{
     pytf::PytfFile
 };
 
+/// Need to be able to send large messages over web sockets.
+/// Expecting around 5MB, but could be larger so allow 25MB.
+pub const WS_FRAME_SIZE_LIMIT: usize = 25*1024*1024;
+
 
 /// One deposition cycle of a trajectory.
 /// Binary data stored as little endian
@@ -20,7 +24,7 @@ use crate::{
 /// - {num_particles: u32}
 /// - [num_particles x {particle_type: u8}]
 /// - [num_frames x [num_particles x {x: f32}{y: f32}{z: f32}]]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrajectorySegment {
     data: Bytes
 }

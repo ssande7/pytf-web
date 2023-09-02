@@ -10,7 +10,7 @@ use futures::stream::{SplitSink, SplitStream};
 use crate::{
     authentication::UserCredentials,
     pytf_runner::{ PytfRunner, PytfStop, PytfPauseFiles, PytfCycle },
-    pytf_frame::SegmentProcessor,
+    pytf_frame::{SegmentProcessor, WS_FRAME_SIZE_LIMIT},
     pytf_config::PytfConfig,
     split_nullterm_utf8_str,
 };
@@ -31,6 +31,7 @@ pub const PAUSE_HEADER:   &[u8] = b"pause\0";
 pub const SEGMENT_HEADER: &[u8] = b"seg\0";
 pub const DONE_HEADER:    &[u8] = b"done\0";
 pub const FAILED_HEADER:  &[u8] = b"fail\0";
+pub const RESUME_HEADER:  &[u8] = b"resume\0";
 
 type WsFramedSink = SplitSink<Framed<BoxedSocket, ws::Codec>, ws::Message>;
 type WsFramedStream = SplitStream<Framed<BoxedSocket, ws::Codec>>;
@@ -68,6 +69,7 @@ impl PytfServer {
         let socket = match awc::Client::new()
             .ws(format!("ws://{}/socket", server_addr.as_ref()))
             .cookie(login_id)
+            .max_frame_size(WS_FRAME_SIZE_LIMIT)
             .connect()
             .await
         {
@@ -196,7 +198,6 @@ impl StreamHandler<Result<ws::Frame, awc::error::WsProtocolError>> for PytfServe
             }
             Ok(msg) => msg,
         };
-        println!("Worker received message: {msg:?}");
         match msg {
             ws::Frame::Text(_) => (),
             ws::Frame::Binary(mut bytes) => {
@@ -276,7 +277,11 @@ impl StreamHandler<Result<ws::Frame, awc::error::WsProtocolError>> for PytfServe
                     };
                     let jobname = config.name.clone();
                     match self.start_worker(config, ctx.address()) {
-                        Ok(Some(old_worker)) => old_worker.do_send(PytfStop { jobname: None }),
+                        Ok(Some(old_worker)) => {
+                            old_worker.do_send(PytfStop { jobname: None });
+                            let _ = self.socket_sink.write(ws::Message::Binary(
+                                [RESUME_HEADER, jobname.as_bytes()].concat().into()));
+                        },
                         Ok(None) => (),
                         Err(e) => {
                             eprintln!("Failed to resume job {jobname}: {e}");
@@ -290,7 +295,6 @@ impl StreamHandler<Result<ws::Frame, awc::error::WsProtocolError>> for PytfServe
                 }
             },
             ws::Frame::Ping(ping) => {
-                println!("Received ping {ping:?}");
                 self.heartbeat = Instant::now();
                 let _ = self.socket_sink.write(ws::Message::Pong(ping));
             }
