@@ -52,7 +52,10 @@ const Login: React.FC<ILogin> = ({ setToken }) => {
         <div className="App-header">
           <h1>Vacuum Deposition</h1>
           <form onSubmit={handleSubmit}>
-            <input placeholder="Username" type="text" onChange={e => setUsername(e.target.value)} />
+            <input placeholder="Username" type="text"
+              onChange={e => setUsername(e.target.value)}
+              autoFocus={true}
+            />
             <br/>
             <input placeholder="Password" type="password" onChange={e => setPassword(e.target.value)} />
             <br/>
