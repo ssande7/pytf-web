@@ -19,7 +19,7 @@
 
 .App-header {
   background-color: #282c34;
-  min-height: 10vh;
+  min-height: 24pt;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -38,8 +38,8 @@
 
 .MD-vis {
   display: flex;
-  width: 60%;
-  padding: 2vh;
+  width: 55%;
+  padding: 14pt;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -47,9 +47,9 @@
 }
 
 .MD-params {
-  width: 30%;
-  padding-left: 2vh;
-  min-height: 0vh;
+  width: 40%;
+  padding-left: 14pt;
+  min-height: 0pt;
   align-items: flex-start;
   text-align: left;
   display: flex;
@@ -72,25 +72,35 @@
 }
 
 .HorizontalSpacer {
-  min-width: 1vh;
+  min-width: 5pt;
   background-color: transparent;
   flex-grow: 1;
 }
 
 .App-button {
-  min-height: 3vh;
+  min-height: 16pt;
+  flex-grow: 1;
+  align-content: middle;
   vertical-align: middle;
   text-align: center;
   background-color: transparent;
   border: none;
   color: white;
   padding: 0.2vh;
-  display: inline-block;
+  display: flex;
   transition-duration: 0.2s;
   cursor: pointer;
 }
 .App-button:hover {
   color: #0b7762;
+}
+
+.VertCenteredIcon {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  align-content: middle;
+  height: 16pt;
 }
 
 /* based on: https://css-tricks.com/making-pure-css-playpause-button/ */
@@ -101,8 +111,8 @@
   vertical-align: middle;
   cursor: pointer;
 
-  width: 3vh;
-  height: 3vh;
+  width: 16pt;
+  height: 16pt;
 
   border-color: transparent transparent transparent white;
   transition: 100ms all ease;
@@ -110,12 +120,12 @@
 
 .PlayButton.play {
   border-style: solid;
-  border-width: 1.5vh 0 1.5vh 2.4vh;
+  border-width: 8pt 0 8pt 12.8pt;
 }
 
 .PlayButton.pause {
   border-style: double;
-  border-width: 0 0 0 2.4vh;
+  border-width: 0 0 0 12.8pt;
 }
 
 .PlayButton:hover {

@@ -1,15 +1,16 @@
 import React, { useEffect, useState, useRef, useMemo, MutableRefObject } from 'react';
 import { Particles, Visualizer, AtomTypes } from 'omovi'
 import { Vector3, Color } from 'three'
+import RepeatIcon from '@mui/icons-material/Repeat';
+import RepeatOnIcon from '@mui/icons-material/RepeatOn';
+import SpeedIcon from '@mui/icons-material/Speed';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import { logout } from './Login'
 import { PytfConfig, MixtureComponentDetailed } from './types';
 import MolList from './MolList';
 import SubmitButton from './SubmitButton';
 import '../App.css';
-
-const TimerSymbol = <>&#x23F1;</>;
-const SaveSymbol = <>&#x1F5AA;</>;
-const ResetCameraSymbol = <>&#x1F441;</>;
 
 interface IComposition {
   socket: React.MutableRefObject<WebSocket | null>,
@@ -97,7 +98,7 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames }) => {
   const camTargetInit   = new Vector3( 2,  1.5,  2);
   const [frame, setFrame] = useState(0);
   const [paused, setPaused] = useState(false);
-  // TODO: const [loop, setLoop] = useState(false);
+  const [loop, setLoop] = useState(false);
   // probably need a useRef to work with animation timer
 
   const atom_types = [
@@ -170,16 +171,23 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames }) => {
   const frameRef = useRef(frame);
   const [animationTimer, setAnimationTimer] = useState<NodeJS.Timer | null>(null);
   const [fps, setFps] = useState(15)
+  const loopRef = useRef(loop);
 
   function startAnimation() {
     setAnimationTimer(setInterval(() => {
-      const new_frame = particles.length > 0 ? (frameRef.current + 1) % particles.length : 0
-      frameRef.current = new_frame
-      setFrame(new_frame)
+      var new_frame = frameRef.current + 1;
+      if (loopRef.current) {
+        new_frame = particles.length > 0 ? new_frame % particles.length : 0;
+        frameRef.current = new_frame
+        setFrame(new_frame)
+      } else if (new_frame < particles.length) {
+        frameRef.current = new_frame
+        setFrame(new_frame);
+      } else {
+        return
+      }
       if (animationSlider.current) {
         animationSlider.current.value = String(new_frame)
-      }
-      if (particles.length === 0) {
       }
     }, 1000.0/fps))
   }
@@ -217,6 +225,13 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames }) => {
     }
   }
 
+  function toggleLoop() {
+    setLoop((loop) => !loop);
+  }
+  useEffect(() => {
+    loopRef.current = loop
+  }, [loop]);
+
   useEffect(() => {
     if (!paused) startAnimation();
   }, []);
@@ -224,10 +239,15 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames }) => {
   return (
     <>
       <div id="canvas-container" style={{ height: '100%', width: '100%'}}>
-        <div style={{ height: '70vh', width: '100%', border: 'medium solid grey', backgroundColor: 'black'}} ref={domElement}>
+        <div
+          style={{
+            height: '400pt', minHeight: '200pt', maxHeight: '80vh',
+            width: '100%', border: 'medium solid grey', backgroundColor: '0x606160'
+          }}
+          ref={domElement}>
         </div>
         <div id="controls" className="MD-vis-controls" style={{width: '100%', padding: 0}}>
-          <div style={{padding: '0.2vh', display: 'flex', flexDirection: 'column', alignContent: 'middle', height: '3vh'}}>
+          <div style={{padding: '12pt', display: 'flex', flexDirection: 'column', alignContent: 'middle', height: '16pt'}}>
             <button className={paused ? "PlayButton play" : "PlayButton pause"} onClick={toggleAnimation} />
           </div>
           <input type="range" min="0" max={particles.length > 0 ? particles.length-1 : 0} defaultValue='0' ref={animationSlider}
@@ -240,16 +260,22 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames }) => {
               if (!paused) {startAnimation()}
             }}
           />
-          <div className="HorizontalSpacer" />
-          <div className="MD-vis-controls" style={{flexGrow: 1, maxWidth: '15%', fontSize: '2vh'}}>
+            <div className="HorizontalSpacer" style={{minWidth: '12pt', maxWidth: '12pt'}}/>
+          <div className="MD-vis-controls" style={{flexGrow: 1, maxWidth: '15%', fontSize: '16pt'}}>
+            <button className="App-button" style={{fontSize: '16pt'}} onClick={toggleLoop} title="Toggle playback loop">
+              {loop ? <RepeatOnIcon/> : <RepeatIcon/>}
+            </button>
+            <div className="HorizontalSpacer" style={{minWidth: '5pt', maxWidth: '5pt'}}/>
             <div title="Animation speed"
-              style={{cursor: 'default', fontSize: '2.5vh',
-                flexGrow: 1, display: 'flex', flexDirection: 'column',
-                alignContent: 'middle', height: '3vh'}}>
-              {TimerSymbol}
+              className="VertCenteredIcon"
+              style={{cursor: 'default'}}
+            >
+              <SpeedIcon/>
             </div>
-            <div className="HorizontalSpacer" style={{minWidth: '0.5vh'}}/>
-            <input type="range" min={5} max={30} style={{flexGrow: 4, maxWidth: '80%', verticalAlign: 'middle'}} defaultValue={fps}
+            <div className="HorizontalSpacer" style={{minWidth: '5pt'}}/>
+            <input type="range" min={5} max={30}
+              style={{flexGrow: 4, maxWidth: '80%', verticalAlign: 'middle'}}
+              defaultValue={fps}
               onChange={(e) => {
                 if (e.target.value) {
                   setFps(e.target.valueAsNumber)
@@ -258,12 +284,13 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames }) => {
             />
           </div>
           <div className="HorizontalSpacer" />
-          <button className="App-button" style={{fontSize: '3vh'}} onClick={resetCamera} title="Reset camera to initial position">
-            {ResetCameraSymbol}
+          <button className="App-button" style={{maxWidth: '16pt'}}
+            onClick={resetCamera} title="Reset camera to initial position">
+            <VisibilityOutlinedIcon/>
           </button>
-          <div className="HorizontalSpacer" style={{maxWidth: '1vh'}}/>
-          <button className="App-button" style={{fontSize: '3vh'}} title="Save deposition movie">
-            {SaveSymbol}
+          <div className="HorizontalSpacer" style={{maxWidth: '5pt'}}/>
+          <button className="App-button" style={{maxWidth: '16pt'}} title="Save deposition movie">
+            <SaveOutlinedIcon/>
           </button>
         </div>
       </div>
@@ -407,13 +434,6 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
       setLastFrame, setParticles,
       next_segment, setNextSegment]);
 
-  // Request next trajectory segment whenever next_segment changes
-  // useEffect(() => {
-  //   if (socket_connected && running && socket.current) {
-  //     socket.current.send(next_segment.toString());
-  //   }
-  // }, [socket_connected, next_segment, running])
-
   return (
     <>
       <div className="App">
@@ -444,8 +464,17 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
             />
           </div>
         </div>
-        <div style={{display: 'flex', flexDirection: 'row-reverse'}}>
-          <button className="App-button" style={{paddingLeft: '0.5vh'}} onClick={() => {
+        <div style={{
+          display: 'flex',
+          flexDirection: 'row-reverse'
+        }}>
+          <button className="App-button"
+            style={{
+              paddingRight: '5pt',
+              display: 'inline-block',
+              flexGrow: 0,
+            }}
+            onClick={() => {
               logout({ token });
               setToken(null);
             }}
