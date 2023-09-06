@@ -147,7 +147,6 @@ impl Handler<ClientDisconnect> for JobServer {
 
     fn handle(&mut self, msg: ClientDisconnect, _ctx: &mut Self::Context) -> Self::Result {
         self.client_sessions.remove(&msg.id);
-        // TODO: cancel job if no clients left
     }
 }
 
@@ -250,9 +249,7 @@ impl Handler<ClientReqJob> for JobServer {
             } // NOTE: Assuming client_map can't get out of sync. Might need a test here if it can.
             println!("Returning job handle");
             // Ping the client to let them know there are already frames available
-            msg.client_addr.do_send(TrajectoryPing {
-                latest_segment: job_lock.latest_segment,
-            });
+            msg.client_addr.do_send(job_lock.build_ping());
             job.clone()
         } else {
             // Create new job and attach client
@@ -330,6 +327,8 @@ impl Handler<UnhandledTrajectorySegment> for JobServer {
             if AddSegmentResult::Ok != job_add_seg_and_notify(job, &msg.jobname, msg.segment_id, msg.segment) {
                 eprintln!("Failed to store data for segment {} of job {}", msg.segment_id, msg.jobname);
             }
+        } else {
+            eprintln!("Received segment data for unknown job");
         }
     }
 }
@@ -344,14 +343,10 @@ pub struct JobInner {
 }
 pub type Job = Arc<RwLock<JobInner>>;
 
-
-/// TODO: Stealing requires input-coordinates, final-coordinates and log file of latest run.
-///       Worker should package these as .tar when pausing a job and send it to the main
-///       server.
+/// Data required to resume a job, packed into bytes
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PausedJobData {
-    /// bytes of a .tar file containing the latest input-coordinates, final-coordinates and log
-    /// files of the paused job to allow resuming on a different worker.
+    /// bytes containing first 10 lines of log file and contents of final-coordinates file
     pub data: actix_web::web::Bytes,
     // TODO: Could attach timestamp here to allow dropping/saving to disk of oldest `Steal` jobs
 }
@@ -362,7 +357,6 @@ pub struct StealingJob {
     pub worker: Addr<WorkerWsSession>,
 }
 
-// TODO: Make worker an Addr to the WorkerWsSession
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum JobStatus {
     /// Waiting to be run
@@ -407,8 +401,6 @@ impl JobInner {
         let jobname = expected_name.as_ref();
         if self.config.name != jobname {
             println!("Received frame data for different job. Expected {jobname}, got {}", self.config.name);
-            // TODO: Find that job? This could happen when one job is replaced
-            // with another, but finishes its current segment before exiting.
             return AddSegmentResult::WrongJob(UnhandledTrajectorySegment { jobname: jobname.to_string(), segment_id, segment });
         }
         if segment_id > self.segments.len() {
@@ -419,7 +411,7 @@ impl JobInner {
         if self.segments[segment_id - 1].replace(segment).is_some() {
             println!("WARNING: Received duplicate of segment {segment_id} for trajectory {}", self.config.name);
         } else {
-            println!("Stored segment {segment_id} for job {}", self.config.name);
+            println!("Stored segment {segment_id} of {} for job {}", self.segments.len(), self.config.name);
         }
         if segment_id > self.latest_segment {
             self.latest_segment = segment_id;
@@ -428,23 +420,35 @@ impl JobInner {
         AddSegmentResult::Ok
     }
 
+    pub fn build_ping(&self) -> TrajectoryPing {
+        TrajectoryPing {
+            latest_segment: self.latest_segment,
+            final_segment: self.latest_segment == self.segments.len(),
+        }
+    }
+
     /// Ping clients interested in job about new trajectory frame
     pub fn notify_clients(&self) {
+        let ping = self.build_ping();
+        println!("Sending ping: {ping:?}");
         for client in &self.clients {
-            client.do_send(TrajectoryPing {
-                latest_segment: self.latest_segment,
-            });
+            client.do_send(ping);
         }
     }
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum AddSegmentResult {
+    /// Added successfully
     Ok,
+    /// Job name didn't match
     WrongJob(UnhandledTrajectorySegment),
+    /// Segment id was larger than the expected last segment
     IdTooLarge,
 }
 
+/// Add a segment to the specified job if the job's name matches the expected name, and notify
+/// any attached clients that more frames are available.
 pub fn job_add_seg_and_notify(job: &Job, expected_name: impl AsRef<str>, segment_id: usize, segment: TrajectorySegment)
 -> AddSegmentResult {
     let out = {

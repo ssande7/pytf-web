@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useMemo, MutableRefObject } from 'react';
 import { Particles, Visualizer, AtomTypes } from 'omovi'
-import { Vector3, Color } from 'three'
+import { Vector3, Color, LineLoop, Mesh, BufferGeometry, BufferAttribute, MeshBasicMaterial } from 'three'
 import RepeatIcon from '@mui/icons-material/Repeat';
 import RepeatOnIcon from '@mui/icons-material/RepeatOn';
 import SpeedIcon from '@mui/icons-material/Speed';
@@ -11,6 +11,55 @@ import { PytfConfig, MixtureComponentDetailed } from './types';
 import MolList from './MolList';
 import SubmitButton from './SubmitButton';
 import '../App.css';
+
+// Box size in nm, from graphene substrate .pdb file, accounting for rotation mapping x,y,z -> y,z,x.
+// TODO: have the server send this info
+const Lz = 4.2600 // x -> z
+const Lx = 3.9352 // y -> x
+
+function heatMapColor(value: number){
+  var h = (1.0 - value) * 240. / 360
+  return hsl2Color(h, 1, 0.5);
+}
+function hue2rgb(p: number, q: number, t: number) {
+    if (t < 0) {
+        t += 1;
+    } else if (t > 1) {
+        t -= 1;
+    }
+
+    if (t >= 0.66) {
+        return p;
+    } else if (t >= 0.5) {
+        return p + (q - p) * (0.66 - t) * 6;
+    } else if (t >= 0.33) {
+        return q;
+    } else {
+        return p + (q - p) * 6 * t;
+    }
+};
+function hsl2Color (h: number, s: number, l: number) {
+    var r, g, b, q: number, p: number;
+    if (s === 0) {
+        r = g = b = l;
+    } else {
+        q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        p = 2 * l - q;
+        r = hue2rgb(p, q, h + 0.33);
+        g = hue2rgb(p, q, h);
+        b = hue2rgb(p, q, h - 0.33);
+    }
+
+    return new Color(r, g, b); // (x << 0) = Math.floor(x)
+};
+
+const atom_types = [
+    AtomTypes.H,
+    AtomTypes.H, AtomTypes.He,
+    AtomTypes.Li, AtomTypes.Be, AtomTypes.B, AtomTypes.C, AtomTypes.N, AtomTypes.O, AtomTypes.F,
+    AtomTypes.Ne, AtomTypes.Na, AtomTypes.Mg, AtomTypes.Al, AtomTypes.Si, AtomTypes.P, AtomTypes.S,
+    AtomTypes.Cl, AtomTypes.Ar, AtomTypes.K, AtomTypes.Ca,
+  ];
 
 interface IComposition {
   socket: React.MutableRefObject<WebSocket | null>,
@@ -24,7 +73,7 @@ const Composition: React.FC<IComposition>
   = ({socket, socket_connected, running, setRunning, resetTrajectory}) =>
 {
   const [molecules, setMolecules] = useState<Array<MixtureComponentDetailed>>([]);
-  const [config, setConfig] = useState<PytfConfig>({deposition_velocity: 0.1, mixture: []});
+  const [config, setConfig] = useState<PytfConfig>({deposition_velocity: 0.35, mixture: []});
   const [submit_waiting, setSubmitWaiting] = useState(false);
 
   // Get the list of available molecules on load
@@ -62,7 +111,7 @@ const Composition: React.FC<IComposition>
         <div className="HorizontalSpacer"/>
         <div>{config.deposition_velocity} nm/ps</div>
       </div>
-      <input type="range" min={1} max={50} defaultValue={10}
+      <input type="range" min={10} max={70} defaultValue={config.deposition_velocity*100}
         disabled={running}
         onChange = {
           (e) => setConfig({
@@ -88,9 +137,13 @@ interface IVis {
   running: boolean,
   particles: Array<Particles>,
   num_frames: number,
+  height_map: Float32Array | null,
+  num_bins: number,
+  roughness: number | null,
+  mean_height: number | null,
 }
 
-const Vis: React.FC<IVis> = ({socket, running, particles, num_frames }) => {
+const Vis: React.FC<IVis> = ({socket, running, particles, num_frames, height_map, num_bins, roughness, mean_height }) => {
   const [vis, setVis] = useState<Visualizer | null>(null);
   const [loadingVis, setLoadingVis] = useState(false);
   const domElement = useRef<HTMLDivElement | null>(null);
@@ -99,31 +152,6 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames }) => {
   const [frame, setFrame] = useState(0);
   const [paused, setPaused] = useState(false);
   const [loop, setLoop] = useState(false);
-  // probably need a useRef to work with animation timer
-
-  const atom_types = [
-      AtomTypes.H,
-      AtomTypes.H,
-      AtomTypes.He,
-      AtomTypes.Li,
-      AtomTypes.Be,
-      AtomTypes.B,
-      AtomTypes.C,
-      AtomTypes.N,
-      AtomTypes.O,
-      AtomTypes.F,
-      AtomTypes.Ne,
-      AtomTypes.Na,
-      AtomTypes.Mg,
-      AtomTypes.Al,
-      AtomTypes.Si,
-      AtomTypes.P,
-      AtomTypes.S,
-      AtomTypes.Cl,
-      AtomTypes.Ar,
-      AtomTypes.K,
-      AtomTypes.Ca,
-    ];
 
   useEffect(() => {
     if (domElement.current && !loadingVis && !vis) {
@@ -153,19 +181,21 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames }) => {
   const prevParticlesRef = useRef<Particles | null>()
   useEffect(() => {
     prevParticlesRef.current = frame < num_frames ? particles[frame] : null;
-  }, [particles, frame, num_frames])
+  }, [particles, particles.length, frame, num_frames])
 
   const prevParticles = prevParticlesRef.current
   useEffect(() => {
     if (!vis) { return }
+    console.log("Particles cleanup check triggered");
     if (prevParticles && prevParticles !== particles[frame]) {
+      console.log("Cleaning up particles");
       vis.remove(prevParticles)
       prevParticles.dispose()
     }
     if (frame < particles.length) {
       vis.add(particles[frame])
     }
-  }, [particles, prevParticles, frame, vis])
+  }, [particles, particles.length, prevParticles, frame, vis])
 
   const animationSlider = useRef<HTMLInputElement | null>(null);
   const frameRef = useRef(frame);
@@ -173,22 +203,24 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames }) => {
   const [fps, setFps] = useState(15)
   const loopRef = useRef(loop);
 
+  useEffect(() => {
+    console.log("Triggered frame update");
+    frameRef.current = frame;
+    if (animationSlider.current) {
+      animationSlider.current.value = String(frame)
+    }
+  }, [frame])
+
   function startAnimation() {
     setAnimationTimer(setInterval(() => {
       var new_frame = frameRef.current + 1;
       if (loopRef.current) {
         new_frame = particles.length > 0 ? new_frame % particles.length : 0;
-        frameRef.current = new_frame
-        setFrame(new_frame)
-      } else if (new_frame < particles.length) {
-        frameRef.current = new_frame
-        setFrame(new_frame);
-      } else {
+      } else if (new_frame >= particles.length) {
         return
       }
-      if (animationSlider.current) {
-        animationSlider.current.value = String(new_frame)
-      }
+      frameRef.current = new_frame
+      setFrame(new_frame)
     }, 1000.0/fps))
   }
 
@@ -236,6 +268,65 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames }) => {
     if (!paused) startAnimation();
   }, []);
 
+  const [height_map_disp, setHeightMapDisp] = useState<Array<Mesh>>([]);
+
+  // Calculate tiles to display heat map
+  useEffect(() => {
+    if (!vis) { return }
+    if (height_map_disp.length > 0) {
+      console.log("Cleaning up height map");
+      for (var tile = 0; tile < height_map_disp.length; tile++) {
+        vis.scene.remove(height_map_disp[tile])
+      }
+    }
+    height_map_disp.length = 0;
+    if (height_map !== null && mean_height !== null && roughness !== null) {
+      const vertices = new Float32Array([
+        0, 0, 0,
+        Lx/num_bins, 0, 0,
+        Lx/num_bins, 0, Lz/num_bins,
+        0, 0, Lz/num_bins,
+      ]);
+      const indices = [
+        0,1,2,
+        2,3,0,
+        0,2,1,
+        3,2,0,
+      ];
+      const square = new BufferGeometry();
+      square.setIndex(indices);
+      square.setAttribute('position', new BufferAttribute(vertices, 3));
+      loopRef.current = false;
+      for (var x = 0; x < num_bins; x++) {
+        for (var z = 0; z < num_bins; z++) {
+          // Colour based on height relative to mean.
+          // Min. value at -1.5 std. dev, max at +1.5
+          const y = height_map[x*num_bins+z];
+          var col = roughness > 0 ? (y - mean_height) / (1.5*roughness) : 0;
+          if (col < -1) { col = -1 }
+          if (col >  1) { col =  1 }
+          col = (col + 1)/2;
+          const material = new MeshBasicMaterial({ color: heatMapColor(col) });
+          const tile = new Mesh(square, material);
+          tile.translateX(x * Lx / num_bins);
+          tile.translateZ(z * Lz / num_bins);
+          tile.translateY(y);
+          height_map_disp.push(tile);
+          vis.scene.add(height_map_disp[x*num_bins+z])
+        }
+      }
+      // Jump to final frame and disable looping
+      setLoop(false);
+      loopRef.current = false;
+      const final_frame = particles.length - 1;
+      frameRef.current = final_frame;
+      setFrame(final_frame);
+    }
+    setHeightMapDisp(height_map_disp);
+
+    // Deliberately not reacting on num_bins change
+  }, [height_map, height_map_disp, mean_height, roughness, setHeightMapDisp, particles, setFrame, setLoop]);
+
   return (
     <>
       <div id="canvas-container" style={{ height: '100%', width: '100%'}}>
@@ -254,7 +345,7 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames }) => {
             style={{verticalAlign: 'middle', flexGrow: 8}}
             onInput={(e) => {
               if (!paused) {stopAnimation()}
-              const new_frame = Number(e.currentTarget.value)
+              const new_frame = e.currentTarget.valueAsNumber
               frameRef.current = new_frame
               setFrame(new_frame)
               if (!paused) {startAnimation()}
@@ -298,6 +389,88 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames }) => {
   );
 }
 
+interface IRoughness {
+  particles: Particles,
+  num_bins: number,
+  setNumBins: React.Dispatch<React.SetStateAction<number>>,
+  roughness: number | null,
+  setRoughness: React.Dispatch<React.SetStateAction<number | null>>,
+  mean_height: number | null,
+  setMeanHeight: React.Dispatch<React.SetStateAction<number | null>>,
+  setHeightMap: React.Dispatch<React.SetStateAction<Float32Array | null>>,
+}
+const Roughness: React.FC<IRoughness> = ({ particles, num_bins, setNumBins, roughness, setRoughness, mean_height, setMeanHeight, setHeightMap }) => {
+  const [min_height, setMinHeight] = useState<number>(0);
+  function calcRoughness() {
+    console.log("Calculating roughness");
+    const bins_sq = num_bins * num_bins;
+    var height_map = new Float32Array(bins_sq).fill(0);
+    var min_ht = Number.MAX_SAFE_INTEGER;
+    var i, mean_y = 0;
+    for (i = 0; i < particles.count; i++) {
+      mean_y += particles.getPosition(i).y;
+    }
+    mean_y /= particles.count;
+    for (i = 0; i < particles.count; i++) {
+      const pos = particles.getPosition(i);
+      if (pos.y > mean_y*5) { continue } // Skip atoms that are obviously in gas phase
+      const rad = atom_types[particles.getType(i)].radius / 10;
+      var bx = Math.floor(pos.x * num_bins / Lx);
+      var bz = Math.floor(pos.z * num_bins / Lz);
+      while (bx < 0) { bx += num_bins }
+      while (bx >= num_bins) { bx -= num_bins }
+      while (bz < 0) { bz += num_bins }
+      while (bz >= num_bins) { bz -= num_bins }
+      const idx = bx*num_bins + bz;
+      // Use atom position + radius for better heat map tile placement
+      const ht = pos.y + rad;
+      if (height_map[idx] < ht) { height_map[idx] = ht }
+      if (ht < min_ht) { min_ht = ht }
+    }
+    const mean_height = height_map.reduce((a, b) => a + b) / bins_sq;
+    const sqvar = height_map
+      .map(h => (h - mean_height)*(h - mean_height))
+      .reduce((a, b) => a + b);
+    const roughness = Math.sqrt(sqvar / bins_sq);
+    console.log("Height map is: ", height_map);
+    setHeightMap(height_map);
+    setMeanHeight(mean_height);
+    setMinHeight(min_ht);
+    setRoughness(roughness)
+  }
+
+  return (<>
+    <div className="MD-vis-controls">
+      <h3>Roughness</h3><br/>
+      <div>Bins per direction:</div>
+      <div className="HorizontalSpacer"/>
+      <div>{num_bins}</div>
+    </div>
+    <input type="range" min={1} max={20} defaultValue={10}
+      onChange = {
+        (e) => setNumBins(e.target.valueAsNumber)
+      }
+    />
+    <br/>
+    <div className="MD-vis-controls">
+      <div>Mean film thickness:</div>
+      <div className="HorizontalSpacer"/>
+      <div>{mean_height !== null ? (mean_height - min_height).toFixed(3) + ' nm' : ''}</div>
+    </div>
+    <div className="MD-vis-controls">
+      <div>Roughness:</div>
+      <div className="HorizontalSpacer"/>
+      <div>{roughness !== null ? roughness.toFixed(3) + ' nm' : ''}</div>
+    </div>
+    <p/>
+    <button
+      onClick={calcRoughness}
+    >
+      Calculate Roughness
+    </button>
+  </>);
+}
+
 interface IViewer {
   token: string;
   setToken: React.Dispatch<React.SetStateAction<string | null>>;
@@ -313,6 +486,14 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
   const [particles, setParticles] = useState<Array<Particles>>([]);
   const [wait_for_segment, setWaitForSegment] = useState<boolean>(false);
   const [latest_segment, setLatestSegment] = useState<number>(0);
+  const [sim_done, setSimDone] = useState<boolean>(false);
+
+  const [particles_roughness, setParticlesRoughness] = useState<Particles | null>(null);
+  const [roughness_ready, setRoughnessReady] = useState<boolean>(false);
+  const [num_bins, setNumBins] = useState<number>(10); // bin size in nm
+  const [roughness, setRoughness] = useState<number | null>(null);
+  const [mean_height, setMeanHeight] = useState<number | null>(null);
+  const [height_map, setHeightMap] = useState<Float32Array | null>(null);
 
   useEffect(() => {
     let ws_url = window.location.href.replace(new RegExp("^http"), "ws");
@@ -381,20 +562,27 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
         setNextSegment(segment_id + 1);
         if (segment_id < latest_segment && socket.current) {
           console.log("Done processing. Requesting next segment: ", segment_id + 1);
-          // Wait 0.5s before requesting more frames to avoid laggy rendering from
+          // Wait 0.25s before requesting more frames to avoid laggy rendering from
           // constant refreshes of `particles`
           setTimeout(() => {
             socket.current?.send((segment_id + 1).toString());
             console.log("Requested segment ", segment_id+1);
-          }, 500);
+          }, 250);
         } else {
           setWaitForSegment(false);
+          if (sim_done) {
+            setRunning(false);
+            setRoughnessReady(true);
+            setParticlesRoughness(particles[particles.length-1]);
+          }
         }
       }).catch(console.error);
 
-    } else if (last_message.data.startsWith("new_frames")) {
+    } else if (last_message.data.startsWith("new_frames") || last_message.data.startsWith("done")) {
+      const done = last_message.data.startsWith("done");
       console.log("Received trajectory ping: ", last_message.data);
-      const latest_segment = Number.parseInt(last_message.data.slice(10));
+      const latest_segment = Number.parseInt(last_message.data.slice(done ? 4 : 10));
+      if (done) { setSimDone(true); }
       setLatestSegment((prev) => latest_segment > prev ? latest_segment : prev);
       setWaitForSegment((waiting) => {
         if (!waiting && latest_segment >= next_segment && socket.current) {
@@ -410,15 +598,6 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
       console.log("Segment not available yet: ", seg);
       setWaitForSegment((waiting) => seg === next_segment ? false : waiting);
 
-    } else if (last_message.data === "done") {
-      // TODO: Enable histogram roughness analysis
-      console.log("Job is finished");
-      setRunning(false);
-      // TODO: set flag for all segments available,
-      // setRunning(false) when segment_id matches latest_segment
-      //
-      // setWaitForSegment(false);
-
     } else if (last_message.data === "failed") {
       // TODO: Show message about job failure
       console.log("Job failed!");
@@ -432,7 +611,9 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
       wait_for_segment, setWaitForSegment,
       latest_segment, setLatestSegment,
       setLastFrame, setParticles,
-      next_segment, setNextSegment]);
+      next_segment, setNextSegment,
+      particles, sim_done,
+    ]);
 
   return (
     <>
@@ -448,19 +629,38 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
                 running={running} setRunning={setRunning}
                 resetTrajectory={() => {
                   console.log("Resetting trajectory");
+                  setSimDone(false);
                   setNextSegment(1);
                   setLatestSegment(0);
+                  setLastFrame(0);
                   setWaitForSegment(false);
                   particles.length = 0;
                   setParticles(particles);
+                  setRoughness(null);
+                  setMeanHeight(null);
+                  setHeightMap(null);
+                  setRoughnessReady(false);
                 }}
               />
+              <p/>
+              {roughness_ready && particles_roughness ?
+                <Roughness
+                  particles={particles_roughness}
+                  num_bins={num_bins} setNumBins={setNumBins}
+                  roughness={roughness} setRoughness={setRoughness}
+                  mean_height={mean_height} setMeanHeight={setMeanHeight}
+                  setHeightMap={setHeightMap}
+                />
+                : null
+              }
             </div>
           </div>
           <div className="MD-vis" >
             <Vis
               socket={socket} running={running}
               particles={particles} num_frames={last_frame}
+              height_map={height_map} num_bins={num_bins}
+              mean_height={mean_height} roughness={roughness}
             />
           </div>
         </div>

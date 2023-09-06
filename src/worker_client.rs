@@ -149,7 +149,7 @@ impl Actor for StartHandler {
 }
 impl Handler<NewWorker> for StartHandler {
     type Result = ();
-    fn handle(&mut self, msg: NewWorker, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: NewWorker, _ctx: &mut Self::Context) -> Self::Result {
         self.worker = Some(msg.worker);
     }
 }

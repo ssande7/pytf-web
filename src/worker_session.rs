@@ -21,7 +21,7 @@ use crate::{
         JobAssignment, JobStatus,
         PausedJobData, UnhandledTrajectorySegment, AddSegmentResult, job_add_seg_and_notify
     },
-    client_session::{JobFailed, TrajectoryPing}
+    client_session::JobFailed,
 };
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
@@ -312,9 +312,11 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WorkerWsSession {
                     let segment = TrajectorySegment::new(bytes);
                     if let Some(job) = &self.job {
                         if let AddSegmentResult::WrongJob(seg) = job_add_seg_and_notify(job, jobname, segment_id, segment) {
+                            println!("Received segment for different job. Forwarding on for processing.");
                             self.job_server.do_send(seg);
                         }
                     } else {
+                        println!("Received segment, but not assigned a job. Forwarding on for processing.");
                         self.job_server.do_send(UnhandledTrajectorySegment{ jobname, segment_id, segment });
                     }
                 } else if bytes.starts_with(FAILED_HEADER) {

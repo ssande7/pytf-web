@@ -98,9 +98,12 @@ impl Actor for ClientWsSession {
             .wait(ctx);
     }
 
-    fn stopping(&mut self, _ctx: &mut Self::Context) -> Running {
+    fn stopping(&mut self, ctx: &mut Self::Context) -> Running {
         println!("Sending disconnect signal for client {}", self.id);
         if !self.force_disconnect {
+            if let Some(job) = &self.job {
+                job.write().unwrap().remove_client(&ctx.address());
+            }
             self.job_server.do_send(ClientDisconnect { id: self.id.clone() });
         }
         Running::Stop
@@ -114,7 +117,7 @@ pub struct ClientForceDisconnect {}
 impl Handler<ClientForceDisconnect> for ClientWsSession {
     type Result = ();
 
-    fn handle(&mut self, msg: ClientForceDisconnect, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, _msg: ClientForceDisconnect, ctx: &mut Self::Context) -> Self::Result {
         // TODO: Send a disconnect message to client?
 
         // Set my id to null before calling ctx.stop() since we got this message because job_server
@@ -205,17 +208,21 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
     }
 }
 
-#[derive(Message)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Message)]
 #[rtype(result="()")]
 pub struct TrajectoryPing {
     pub latest_segment: usize,
+    pub final_segment: bool,
 }
 
 impl Handler<TrajectoryPing> for ClientWsSession {
     type Result = ();
     /// Notify client of possible extra trajectory data
     fn handle(&mut self, msg: TrajectoryPing, ctx: &mut Self::Context) -> Self::Result {
-        ctx.text(format!("{MSG_NEW_FRAMES}{}", msg.latest_segment));
+        ctx.text(format!("{}{}",
+            if msg.final_segment {MSG_JOB_DONE} else {MSG_NEW_FRAMES},
+            msg.latest_segment
+        ));
     }
 }
 
@@ -238,5 +245,3 @@ impl Handler<JobFailed> for ClientWsSession {
         }
     }
 }
-
-// TODO: handle JobDone

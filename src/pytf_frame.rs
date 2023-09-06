@@ -88,7 +88,9 @@ impl TrajectorySegment {
                     line.get(10..15)
                         .and_then(|s| {
                             ATOM_NAME_MAP.get().unwrap().map.get(
-                                s.trim().trim_end_matches(char::is_numeric)
+                                s.trim()
+                                 .to_ascii_uppercase()
+                                 .trim_end_matches(char::is_numeric)
                             )
                         })
                         .unwrap_or(&0u8)

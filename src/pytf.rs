@@ -1,6 +1,6 @@
 use std::{path::Path, fmt::Display};
 use anyhow::Result;
-use pyo3::prelude::*;
+use pyo3::{prelude::*, intern};
 // NOTE: pyo3 requires python3-dev installed
 // (included in Arch python3, but maybe not others)
 
@@ -35,11 +35,11 @@ impl Pytf {
     /// Create a PyThinFilm.deposition.Deposition object from a pytf config file
     pub fn new<P: AsRef<Path>>(config: P) -> PyResult<Self> {
         Python::with_gil(|py| -> PyResult<Self> {
-            let pytf = py.import("PyThinFilm.deposition")?
-                .getattr("Deposition")?
+            let pytf = py.import(intern!(py, "PyThinFilm.deposition"))?
+                .getattr(intern!(py, "Deposition"))?
                 .call1((config.as_ref().as_os_str(), PYTF_DEBUG))?;
-            let run_id: i32 = pytf.getattr("run_ID")?.extract()?;
-            let final_run_id: i32 = pytf.getattr("last_run_ID")?.extract()?;
+            let run_id: i32 = pytf.getattr(intern!(py, "run_ID"))?.extract()?;
+            let final_run_id: i32 = pytf.getattr(intern!(py, "last_run_ID"))?.extract()?;
             Ok(Self {
                 deposition: pytf.into(),
                 run_id,
@@ -50,13 +50,15 @@ impl Pytf {
 
     /// Perform one deposition cycle.
     pub fn cycle(&mut self) -> Result<()> {
+
         Python::with_gil(|py| -> Result<()> {
-            let success = self.deposition.call_method0(py, "cycle")?.extract(py)?;
-            // if let Some(writer) = self.traj_writer {
-            //     writer.join();
-            // }
-            if success {
-                self.run_id = self.deposition.getattr(py, "run_ID")?.extract(py)?;
+            // Don't deposit anything on final run to reduce potential for gas phase molecules
+            // in final configuratoin
+            if self.run_id == self.final_run_id - 1 {
+                self.deposition.setattr(py, intern!(py, "insertions_per_run"), 0)?;
+            }
+            if self.deposition.call_method0(py, "cycle")?.extract(py)? {
+                self.run_id = self.deposition.getattr(py, intern!(py, "run_ID"))?.extract(py)?;
                 Ok(())
             } else {
                 Err(PytfError::CycleFailed.into())

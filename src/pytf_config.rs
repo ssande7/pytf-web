@@ -34,10 +34,11 @@ impl MoleculeResources {
 }
 
 pub static AVAILABLE_MOLECULES: OnceLock<MoleculeResources> = OnceLock::new();
-pub const TARGET_ATOMS_TOTAL: usize = 400;
+pub const INSERTIONS_PER_RUN: usize = 4;
+pub const TARGET_ATOMS_TOTAL: usize = 1300;
 pub const INSERT_DISTANCE:  f32 = 2f32;
 pub const RUN_TIME_MINIMUM: f32 = 18f32;
-pub const DEFAULT_DEPOSITION_VELOCITY: f32 = 0.5;
+pub const DEFAULT_DEPOSITION_VELOCITY: f32 = 0.35;
 
 // TODO: Split this into the base transfer type and the fully filled type to avoid all the
 //       Options and unwraps
@@ -98,7 +99,7 @@ impl From<PytfConfigMinimal> for PytfConfig {
             atoms_per_step += mol.ratio * natoms;
         }
         let atoms_per_step = if ratio_tot > 0 {
-            atoms_per_step as f32 / ratio_tot as f32
+            (INSERTIONS_PER_RUN * atoms_per_step) as f32 / ratio_tot as f32
         } else { 1f32 };
         let n_cycles = (TARGET_ATOMS_TOTAL as f32 / atoms_per_step).ceil() as usize;
         let run_time = (INSERT_DISTANCE / config.deposition_velocity) + RUN_TIME_MINIMUM;

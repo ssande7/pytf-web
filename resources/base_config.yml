@@ -9,7 +9,7 @@ overhead_void_space: 12.0 # nm (TODO: maybe write this to avoid duplicating it i
 use_gpu : False
 description: "Vacuum deposition test"
 nstout: 100
-insertions_per_run: 3
+insertions_per_run: 4
 insertion_xy_radius: 0.8 #nm
 insertion_z_radius: 1.0 #nm
 seed: 489327835

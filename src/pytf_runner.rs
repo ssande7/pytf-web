@@ -167,27 +167,27 @@ impl Handler<PytfCycle> for PytfRunner {
             self.send_failed();
             return
         }
-        if self.pytf.run_id() >= self.pytf.final_run_id() {
+        let run_id = self.pytf.last_finished_run();
+        // Create trajectory packer to send out segment
+        // as run id + jobname + workdir to be processed and sent
+        self.segment_proc.do_send(
+            SegToProcess::new(
+                self.config.work_directory.clone(),
+                self.config.name.clone(),
+                run_id,
+            )
+        );
+        println!("Completed cycle {} successfully.", run_id);
+
+        if run_id as i32 >= self.pytf.final_run_id() {
             println!("Completed final cycle. Exiting.");
             self.send_done();
         } else {
-            let run_id = self.pytf.last_finished_run();
-            println!("Completed cycle {run_id} successfully. Queing next cycle.");
-
-            // Create trajectory packer to send out segment
-            // as run id + jobname + workdir to be processed and sent
-            self.segment_proc.do_send(
-                SegToProcess::new(
-                    self.config.work_directory.clone(),
-                    self.config.name.clone(),
-                    run_id,
-                )
-            );
-
             // Send a cycle message to myself to start the next cycle
             // This allows a PytfStop signal to get through and stop the
             // next cycle from happening if necessary.
             ctx.address().do_send(PytfCycle {});
+            println!("Queing next cycle.");
         }
     }
 }
