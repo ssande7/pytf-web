@@ -40,8 +40,8 @@ pub const INSERT_DISTANCE:  f32 = 2f32;
 pub const RUN_TIME_MINIMUM: f32 = 18f32;
 pub const DEFAULT_DEPOSITION_VELOCITY: f32 = 0.35;
 
-// TODO: Split this into the base transfer type and the fully filled type to avoid all the
-//       Options and unwraps
+/// Full information about simulation to be appended
+/// to base config file.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PytfConfig {
     pub name: String,
@@ -59,6 +59,8 @@ pub struct PytfConfig {
     pub mixture: Vec<MixtureComponent>,
 }
 
+/// Minimal config information sent from
+/// client to be filled into full PytfConfig
 #[derive(Deserialize, Clone, Debug)]
 pub struct PytfConfigMinimal {
     deposition_velocity: f32,

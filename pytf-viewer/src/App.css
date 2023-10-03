@@ -10,7 +10,6 @@
   height: 40vmin;
   pointer-events: none;
 }
-
 @media (prefers-reduced-motion: no-preference) {
   .App-logo {
     animation: App-logo-spin infinite 20s linear;
@@ -30,32 +29,33 @@
 
 .MD-container {
   width: 100%;
+  height: 100%;
   background-color: #282c34;
-  display: flex;
+  display: block;
   flex-direction: row;
   align-items: flex-start;
 }
 
 .MD-vis {
   display: flex;
-  width: 55%;
+  width: 50%;
   padding: 14pt;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  flex-grow: 8;
+  float: right;
 }
 
 .MD-params {
   width: 40%;
-  padding-left: 14pt;
+  padding-left: 10pt;
   min-height: 0pt;
   align-items: flex-start;
   text-align: left;
   display: flex;
   flex-direction: column;
   color: white;
-  flex-grow: 1;
+  float: left;
 }
 
 .MD-param-group {
@@ -144,3 +144,72 @@
     transform: rotate(360deg);
   }
 }
+
+.molecule-tile {
+  width: '100%';
+  background: '#44e';
+  color: 'white';
+  text-align: center;
+  display: block
+}
+
+ul {
+  width: 100%;
+  list-style: none;
+  padding: 0;
+  text-align: center;
+  overflow: auto;
+}
+ul > li {
+  margin-bottom: 15px;
+}
+li span {
+  display: block;
+  clear: both;
+  padding: 25px 0;
+}
+ul ul li {
+  float: left;
+  width: 46%;
+  max-width: 150pt;
+  margin: 2% 2% 2% 0;
+}
+
+.collapsible {
+  background-color: #444;
+  color: white;
+  cursor: pointer;
+  padding: 10pt;
+  width: 100%;
+  border: none;
+  text-align: left;
+  outline: none;
+  font-size: 14pt;
+}
+
+.active, .collapsible:hover {
+  background-color: #666;
+}
+
+.collapsible-content {
+  padding: 0 10pt;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background-color: #333;
+}
+
+.molecule-picker {
+  padding: 0 16pt;
+  display: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background-color: rgba(0,0,0,0.7);
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+}
+

@@ -99,7 +99,6 @@ const Composition: React.FC<IComposition>
 
   return (
     <div className="MD-param-group">
-      <h3>Composition</h3>
       <MolList
         running={running}
         molecules={molecules}
@@ -111,7 +110,7 @@ const Composition: React.FC<IComposition>
         <div className="HorizontalSpacer"/>
         <div>{config.deposition_velocity} nm/ps</div>
       </div>
-      <input type="range" min={10} max={70} defaultValue={config.deposition_velocity*100}
+      <input type="range" min={10} max={100} defaultValue={config.deposition_velocity*100}
         disabled={running}
         onChange = {
           (e) => setConfig({
@@ -328,64 +327,63 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames, height_map
   }, [height_map, height_map_disp, mean_height, roughness, setHeightMapDisp, particles, setFrame, setLoop]);
 
   return (
-    <>
-      <div id="canvas-container" style={{ height: '100%', width: '100%'}}>
-        <div
-          style={{
-            height: '400pt', minHeight: '200pt', maxHeight: '80vh',
-            width: '100%', border: 'medium solid grey', backgroundColor: '0x606160'
-          }}
-          ref={domElement}>
+    <div id="canvas-container" style={{ height: '100%', width: '100%'}}>
+      <div
+        style={{
+          height: '400pt', minHeight: '200pt', maxHeight: '80vh',
+          width: '100%', border: 'medium solid grey',
+          backgroundColor: '0x606160'
+        }}
+        ref={domElement}>
+      </div>
+      <div id="controls" className="MD-vis-controls" style={{width: '100%', padding: 0}}>
+        <div style={{padding: '12pt', display: 'flex', flexDirection: 'column', alignContent: 'middle', height: '16pt'}}>
+          <button className={paused ? "PlayButton play" : "PlayButton pause"} onClick={toggleAnimation} />
         </div>
-        <div id="controls" className="MD-vis-controls" style={{width: '100%', padding: 0}}>
-          <div style={{padding: '12pt', display: 'flex', flexDirection: 'column', alignContent: 'middle', height: '16pt'}}>
-            <button className={paused ? "PlayButton play" : "PlayButton pause"} onClick={toggleAnimation} />
+        <input type="range" min="0" max={particles.length > 0 ? particles.length-1 : 0} defaultValue='0' ref={animationSlider}
+          style={{verticalAlign: 'middle', flexGrow: 8}}
+          onInput={(e) => {
+            if (!paused) {stopAnimation()}
+            const new_frame = e.currentTarget.valueAsNumber
+            frameRef.current = new_frame
+            setFrame(new_frame)
+            if (!paused) {startAnimation()}
+          }}
+        />
+          <div className="HorizontalSpacer" style={{minWidth: '12pt', maxWidth: '12pt'}}/>
+        <div className="MD-vis-controls" style={{flexGrow: 1, maxWidth: '15%', fontSize: '16pt'}}>
+          <button className="App-button" style={{fontSize: '16pt'}} onClick={toggleLoop} title="Toggle playback loop">
+            {loop ? <RepeatOnIcon/> : <RepeatIcon/>}
+          </button>
+          <div className="HorizontalSpacer" style={{minWidth: '5pt', maxWidth: '5pt'}}/>
+          <div title="Animation speed"
+            className="VertCenteredIcon"
+            style={{cursor: 'default'}}
+          >
+            <SpeedIcon/>
           </div>
-          <input type="range" min="0" max={particles.length > 0 ? particles.length-1 : 0} defaultValue='0' ref={animationSlider}
-            style={{verticalAlign: 'middle', flexGrow: 8}}
-            onInput={(e) => {
-              if (!paused) {stopAnimation()}
-              const new_frame = e.currentTarget.valueAsNumber
-              frameRef.current = new_frame
-              setFrame(new_frame)
-              if (!paused) {startAnimation()}
+          <div className="HorizontalSpacer" style={{minWidth: '5pt'}}/>
+          <input type="range" min={5} max={30}
+            style={{flexGrow: 4, maxWidth: '80%', verticalAlign: 'middle'}}
+            defaultValue={fps}
+            onChange={(e) => {
+              if (e.target.value) {
+                setFps(e.target.valueAsNumber)
+              }
             }}
           />
-            <div className="HorizontalSpacer" style={{minWidth: '12pt', maxWidth: '12pt'}}/>
-          <div className="MD-vis-controls" style={{flexGrow: 1, maxWidth: '15%', fontSize: '16pt'}}>
-            <button className="App-button" style={{fontSize: '16pt'}} onClick={toggleLoop} title="Toggle playback loop">
-              {loop ? <RepeatOnIcon/> : <RepeatIcon/>}
-            </button>
-            <div className="HorizontalSpacer" style={{minWidth: '5pt', maxWidth: '5pt'}}/>
-            <div title="Animation speed"
-              className="VertCenteredIcon"
-              style={{cursor: 'default'}}
-            >
-              <SpeedIcon/>
-            </div>
-            <div className="HorizontalSpacer" style={{minWidth: '5pt'}}/>
-            <input type="range" min={5} max={30}
-              style={{flexGrow: 4, maxWidth: '80%', verticalAlign: 'middle'}}
-              defaultValue={fps}
-              onChange={(e) => {
-                if (e.target.value) {
-                  setFps(e.target.valueAsNumber)
-                }
-              }}
-            />
-          </div>
-          <div className="HorizontalSpacer" />
-          <button className="App-button" style={{maxWidth: '16pt'}}
-            onClick={resetCamera} title="Reset camera to initial position">
-            <VisibilityOutlinedIcon/>
-          </button>
-          <div className="HorizontalSpacer" style={{maxWidth: '5pt'}}/>
-          <button className="App-button" style={{maxWidth: '16pt'}} title="Save deposition movie">
-            <SaveOutlinedIcon/>
-          </button>
         </div>
+        <div className="HorizontalSpacer" />
+        <button className="App-button" style={{maxWidth: '16pt'}}
+          onClick={resetCamera} title="Reset camera to initial position">
+          <VisibilityOutlinedIcon/>
+        </button>
+        <div className="HorizontalSpacer" style={{maxWidth: '5pt'}}/>
+        <button className="App-button" style={{maxWidth: '16pt'}} title="Save deposition movie">
+          <SaveOutlinedIcon/>
+        </button>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -440,8 +438,8 @@ const Roughness: React.FC<IRoughness> = ({ particles, num_bins, setNumBins, roug
   }
 
   return (<>
+    <h3>Roughness</h3>
     <div className="MD-vis-controls">
-      <h3>Roughness</h3><br/>
       <div>Bins per direction:</div>
       <div className="HorizontalSpacer"/>
       <div>{num_bins}</div>
@@ -618,11 +616,11 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
   return (
     <>
       <div className="App">
+        <div className="App-header">
+          <h1>Vacuum Deposition</h1>
+        </div>
         <div className="MD-container">
           <div className="MD-params" id="input-container">
-            <div className="App-header">
-              <h1>Vacuum Deposition</h1>
-            </div>
             <div style={{display: 'grid', width: '100%', alignItems: 'left'}}>
               <Composition
                 socket={socket} socket_connected={socket_connected}
