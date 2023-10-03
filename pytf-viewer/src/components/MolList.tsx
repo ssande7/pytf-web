@@ -30,6 +30,7 @@ const MolList: React.FC<IMolList> =
 {
   const [pick_mol, setPickMol] = useState(false);
   const [show_composition, setShowComposition] = useState(true);
+  const [composition, setComposition] = useState<Array<number>>([]);
 
   const update_ratio = (i: number, val: number) => {
     setConfig((prev) => {return {
@@ -59,8 +60,8 @@ const MolList: React.FC<IMolList> =
         <ul style={{ overflow: 'visible' }}>
           <li><ul style={{maxHeight: '320pt', overflowY: 'scroll'}}>{
             config.mixture.length === molecules.length ?
-              config.mixture.map((mol, i) => {
-                return mol.ratio > 0 ? (
+              composition.map((i) => {
+                return (
                   <li
                     className="molecule-tile"
                     style={{background: '#eee', color: 'black', height: '150pt'}}
@@ -77,6 +78,7 @@ const MolList: React.FC<IMolList> =
                       disabled={running}
                       onClick={() => {
                         update_ratio(i, 0);
+                        setComposition(composition.filter((j) => i !== j));
                       }}
                     >
                       <CloseIcon/>
@@ -112,7 +114,10 @@ const MolList: React.FC<IMolList> =
                           display: 'inline-block'
                         }}
                         disabled={running}
-                        onClick={() => {if (mol.ratio > 1) update_ratio(i, mol.ratio-1)}}
+                        onClick={() => {
+                          if (config.mixture[i].ratio > 1)
+                            update_ratio(i, config.mixture[i].ratio-1)
+                        }}
                       ><RemoveIcon/></button>
                       <input
                         type="text"
@@ -126,7 +131,7 @@ const MolList: React.FC<IMolList> =
                         min = {1} size = {4}
                         width = "80%"
                         disabled = {running}
-                        value = {mol.ratio}
+                        value = {config.mixture[i].ratio}
                         onChange={(e) => {
                           const val = e.target.value.replaceAll(RegExp('[^0-9]+', 'g'), '');
                           const ratio = val ? parseInt(val) : 1;
@@ -140,11 +145,10 @@ const MolList: React.FC<IMolList> =
                           display: 'inline-block'
                         }}
                         disabled={running}
-                        onClick={() => update_ratio(i, mol.ratio+1)}
+                        onClick={() => update_ratio(i, config.mixture[i].ratio+1)}
                       ><AddIcon/></button>
                     </div>
-                </li>)
-              : "";
+                </li>);
             })
             : ""
           }
@@ -188,6 +192,8 @@ const MolList: React.FC<IMolList> =
                     onClick={() => {
                       setPickMol(false);
                       update_ratio(i, 1);
+                      composition.push(i);
+                      setComposition(composition);
                     }}
                   >
                     <div style={{
