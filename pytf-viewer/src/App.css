@@ -1,9 +1,9 @@
 .App {
-  text-align: center;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  background-color: #282c34;
+  justify-items: flex-start;
+  background-color: #222; /*#282c34;*/
 }
 
 .App-logo {
@@ -17,49 +17,146 @@
 }
 
 .App-header {
-  background-color: #282c34;
-  min-height: 24pt;
+  flex-grow: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  color: white;
+  background: #444;
+  margin: 0;
+  padding: 0;
+  margin-bottom: 1pt;
+  overflow: hidden;
+}
+
+.header-text {
+  padding: 12pt;
+  font-size: 21pt;
+  margin-right: auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-items: left;
+}
+
+.header-button-container {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: stretch;
+}
+
+.header-button {
+  padding: 12pt;
+  font-size: 11pt;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-items: center;
+  background-color: #444;
+}
+.header-button:hover {
+  background-color: #555;
+}
+
+.view-container {
+  display: flex;
+  flex-direction: right;
+  align-items: stretch;
+  background-color: #222;
+  flex-grow: 2;
+}
+
+.tab-container {
+  flex-grow: 45;
+  display: flex;
+  flex-direction: row;
+  align-items: top;
+  /* justify-items: left; */
+  border: none;
+  /* width: 42%; */
+}
+
+.tab-buttons {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
+  align-items: stretch;
+  justify-items: top;
+  background-color: #222;
+}
+
+.tab-button {
+  margin: 0;
+  margin-left: 12pt;
+  font-size: 14pt;
+  padding: 10pt;
+  background-color: #333;
   color: white;
+  cursor: pointer;
+  /* writing-mode: vertical-lr; */
+  /* text-orientation: sideways; */
+  /* transform: translate(14pt, 0) rotate(180deg); */
+}
+.tab-button:hover {
+  background-color: #444;
+}
+
+.tab-button-selected {
+  margin-left: 5pt;
+  background-color: #444;
 }
 
 .MD-container {
-  width: 100%;
-  height: 100%;
-  background-color: #282c34;
+  background-color: #222;
   display: block;
   flex-direction: row;
   align-items: flex-start;
+  border-left-color: #444;
+  border-left-style: solid;
+  border-left-width: 5pt;
+}
+
+.vis-container {
+  flex-grow: 55;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: top;
+  background-color: #222;
+  margin-bottom: 10pt;
 }
 
 .MD-vis {
   display: flex;
-  width: 50%;
-  padding: 14pt;
+  padding: 10pt;
+  margin: 0;
+  margin-top: 10pt;
+  margin-left: 14pt;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  float: right;
+  align-items: stretch;
+  justify-content: top;
+  background-color: #444;
 }
 
 .MD-params {
-  width: 40%;
-  padding-left: 10pt;
-  min-height: 0pt;
-  align-items: flex-start;
-  text-align: left;
+  flex-grow: 2;
+  padding: 10pt;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
+  justify-items: flex-start;
+  text-align: left;
   color: white;
-  float: left;
+  background-color: #222;
+  border-left-color: #444;
+  border-left-style: solid;
+  border-left-width: 5pt;
 }
 
 .MD-param-group {
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-items: flex-start;
 }
 
 .MD-vis-controls {
@@ -136,6 +233,33 @@
   color: #61dafb;
 }
 
+
+.submit-button {
+  margin: 0;
+  padding: 10pt;
+  margin-top: 10pt;
+  font-size: 14pt;
+  border: none;
+  background-color: #009933;
+  color: white;
+  cursor: pointer;
+  align-self: stretch;
+}
+.submit-button:hover {
+  background-color: #00b33c;
+}
+.submit-button:disabled {
+  background-color: lightgrey;
+  cursor: unset;
+}
+
+.cancel {
+  background-color: #992600;
+}
+.cancel:hover {
+  background-color: #b32d00;
+}
+
 @keyframes App-logo-spin {
   from {
     transform: rotate(0deg);
@@ -147,32 +271,39 @@
 
 .molecule-tile {
   width: '100%';
-  background: '#44e';
+  background-color: '#eee';
   color: 'white';
   text-align: center;
-  display: block
+  display: block;
+  border-style: none;
+  border-radius: 0;
 }
 
-ul {
-  width: 100%;
-  list-style: none;
-  padding: 0;
-  text-align: center;
-  overflow: auto;
+.molecule-tile-clickable {
+  cursor: pointer;
 }
-ul > li {
-  margin-bottom: 15px;
+.molecule-tile-clickable:hover {
+  background-color: #ccc;
 }
-li span {
-  display: block;
-  clear: both;
-  padding: 25px 0;
+
+.add-molecule-button {
+  color: white;
+  background: transparent;
+  border-style: solid;
+  border-color: #eee;
+  border-radius: 0;
+  cursor: pointer;
 }
-ul ul li {
-  float: left;
-  width: 46%;
-  max-width: 150pt;
-  margin: 2% 2% 2% 0;
+
+.molecule-tile-grid {
+  padding: 10pt;
+  background-color: transparent;
+  display: grid;
+  gap: 10pt;
+  grid-template-columns: repeat( auto-fill, minmax(150pt, 1fr));
+  grid-auto-rows: 150pt;
+  overflow-y: scroll;
+  min-height: 150pt;
 }
 
 .collapsible {
@@ -180,29 +311,41 @@ ul ul li {
   color: white;
   cursor: pointer;
   padding: 10pt;
-  width: 100%;
-  border: none;
   text-align: left;
   outline: none;
   font-size: 14pt;
 }
 
 .active, .collapsible:hover {
-  background-color: #666;
+  background-color: #555;
 }
 
 .collapsible-content {
-  padding: 0 10pt;
+  flex-direction: column;
+  align-items: stretch;
+  justify-items: flex-start;
+  padding: 10pt;
   overflow-x: hidden;
   overflow-y: auto;
   background-color: #333;
 }
 
 .molecule-picker {
-  padding: 0 16pt;
-  display: none;
-  overflow-x: hidden;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-items: flex-start;
+  padding: 0;
+  background-color: #333;
+  color: white;
+  height: 80vh;
+  width: 50%;
+}
+
+.molecule-picker-surround {
+  flex-direction: column;
+  align-items: center;
+  justify-items: center;
   background-color: rgba(0,0,0,0.7);
   position: fixed;
   top: 0;

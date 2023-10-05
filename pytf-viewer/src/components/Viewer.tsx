@@ -11,6 +11,7 @@ import { PytfConfig, MixtureComponentDetailed } from './types';
 import MolList from './MolList';
 import SubmitButton from './SubmitButton';
 import '../App.css';
+import CollapseIndicator from './CollapseIndicator';
 
 // Box size in nm, from graphene substrate .pdb file, accounting for rotation mapping x,y,z -> y,z,x.
 // TODO: have the server send this info
@@ -75,6 +76,7 @@ const Composition: React.FC<IComposition>
   const [molecules, setMolecules] = useState<Array<MixtureComponentDetailed>>([]);
   const [config, setConfig] = useState<PytfConfig>({deposition_velocity: 0.35, mixture: []});
   const [submit_waiting, setSubmitWaiting] = useState(false);
+  const [protocol_visible, setProtocolVisible] = useState(true);
 
   // Get the list of available molecules on load
   useEffect(() => {
@@ -104,22 +106,42 @@ const Composition: React.FC<IComposition>
         molecules={molecules}
         config={config} setConfig={setConfig}
       />
-      <h3>Protocol</h3>
-      <div className="MD-vis-controls">
-        <div>Deposition velocity:</div>
-        <div className="HorizontalSpacer"/>
-        <div>{config.deposition_velocity} nm/ps</div>
+      <div className="collapsible"
+        onClick={() => setProtocolVisible((prev) => !prev)}
+      >
+        <b>Protocol</b>
+        <CollapseIndicator visible={protocol_visible} />
       </div>
-      <input type="range" min={10} max={100} defaultValue={config.deposition_velocity*100}
-        disabled={running}
-        onChange = {
-          (e) => setConfig({
-            ...config,
-            deposition_velocity: e.target.valueAsNumber/100.0
-          })
-        }
-      />
-      <p/>
+      <div className="collapsible-content"
+        style={{
+          paddingTop: '10pt',
+          paddingBottom: '10pt',
+          display: protocol_visible ? "flex" : "none",
+          flexDirection: 'column',
+          alignItems: 'stretch',
+        }}
+      >
+          <div style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'stretch',
+            justifyItems: 'left'
+          }}>
+            <div style={{marginRight: 'auto'}}>Deposition velocity:</div>
+            <div>{config.deposition_velocity} nm/ps</div>
+          </div>
+          <input type="range"
+            min={10} max={100}
+            defaultValue={config.deposition_velocity*100}
+            disabled={running}
+            onChange = {
+              (e) => setConfig({
+                ...config,
+                deposition_velocity: e.target.valueAsNumber/100.0
+              })
+            }
+          />
+      </div>
       <SubmitButton
         socket={socket} socket_connected={socket_connected}
         config={config}
@@ -327,16 +349,16 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames, height_map
   }, [height_map, height_map_disp, mean_height, roughness, setHeightMapDisp, particles, setFrame, setLoop]);
 
   return (
-    <div id="canvas-container" style={{ height: '100%', width: '100%'}}>
+    <div className="MD-vis" >
       <div
         style={{
           height: '400pt', minHeight: '200pt', maxHeight: '80vh',
-          width: '100%', border: 'medium solid grey',
           backgroundColor: '0x606160'
         }}
         ref={domElement}>
       </div>
-      <div id="controls" className="MD-vis-controls" style={{width: '100%', padding: 0}}>
+      <div id="controls" className="MD-vis-controls"
+        style={{width: '100%', padding: 0}}>
         <div style={{padding: '12pt', display: 'flex', flexDirection: 'column', alignContent: 'middle', height: '16pt'}}>
           <button className={paused ? "PlayButton play" : "PlayButton pause"} onClick={toggleAnimation} />
         </div>
@@ -356,7 +378,7 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames, height_map
             {loop ? <RepeatOnIcon/> : <RepeatIcon/>}
           </button>
           <div className="HorizontalSpacer" style={{minWidth: '5pt', maxWidth: '5pt'}}/>
-          <div title="Animation speed"
+          <div title="Playback speed"
             className="VertCenteredIcon"
             style={{cursor: 'default'}}
           >
@@ -617,11 +639,31 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
     <>
       <div className="App">
         <div className="App-header">
-          <h1>Vacuum Deposition</h1>
+          <div className="header-text">
+            <b>Vacuum Deposition</b>
+          </div>
+          <div className="header-button-container">
+            <div className="header-button"
+                onClick={() => {
+                  logout({ token });
+                  setToken(null);
+                }}
+              >
+                Sign Out ({JSON.parse(token).token})
+              </div>
+          </div>
         </div>
-        <div className="MD-container">
-          <div className="MD-params" id="input-container">
-            <div style={{display: 'grid', width: '100%', alignItems: 'left'}}>
+        <div className="view-container">
+          <div className="tab-container">
+            <div className="tab-buttons">
+              <p className="tab-button tab-button-selected">
+                <b>Simulation</b>
+              </p>
+              <p className="tab-button">
+                <b>Roughness</b>
+              </p>
+            </div>
+            <div className="MD-params">
               <Composition
                 socket={socket} socket_connected={socket_connected}
                 running={running} setRunning={setRunning}
@@ -653,7 +695,7 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
               }
             </div>
           </div>
-          <div className="MD-vis" >
+          <div className="vis-container">
             <Vis
               socket={socket} running={running}
               particles={particles} num_frames={last_frame}
@@ -661,24 +703,6 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
               mean_height={mean_height} roughness={roughness}
             />
           </div>
-        </div>
-        <div style={{
-          display: 'flex',
-          flexDirection: 'row-reverse'
-        }}>
-          <button className="App-button"
-            style={{
-              paddingRight: '5pt',
-              display: 'inline-block',
-              flexGrow: 0,
-            }}
-            onClick={() => {
-              logout({ token });
-              setToken(null);
-            }}
-          >
-            Sign Out ({JSON.parse(token).token})
-          </button>
         </div>
       </div>
     </>

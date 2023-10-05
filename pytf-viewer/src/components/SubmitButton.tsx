@@ -32,7 +32,11 @@ const SubmitButton: React.FC<ISubmitButton> =
     setWaiting(false);
     setRunning(!running);
   }
-  return (<button disabled={waiting || !socket_connected } onClick={submitComposition}>{running ? "Cancel" : "Submit"}</button>);
+  return (<button
+    className={"submit-button" + (running ? " cancel" : "")}
+    disabled={waiting || !socket_connected }
+    onClick={submitComposition}
+  ><b>{running ? "Cancel" : "Submit"}</b></button>);
 }
 
 export default SubmitButton;

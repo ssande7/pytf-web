@@ -3,9 +3,8 @@ import { PytfConfig, MixtureComponentDetailed } from './types';
 import CloseIcon from '@mui/icons-material/Close';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import '../App.css';
+import CollapseIndicator from './CollapseIndicator';
 
 const RegSplitNums = RegExp('[0-9]+|[^0-9]+', 'g');
 const RegNum = RegExp('[0-9]+', 'g');
@@ -31,6 +30,7 @@ const MolList: React.FC<IMolList> =
   const [pick_mol, setPickMol] = useState(false);
   const [show_composition, setShowComposition] = useState(true);
   const [composition, setComposition] = useState<Array<number>>([]);
+  const [show_molecule_2d, setShowMolecule2d] = useState<number|null>(null);
 
   const update_ratio = (i: number, val: number) => {
     setConfig((prev) => {return {
@@ -43,28 +43,29 @@ const MolList: React.FC<IMolList> =
     }})
   }
 
-  return (
-    <div style={{ width: '100%' }}>
+  return (<>
       <div className="collapsible" onClick={() => setShowComposition((prev) => !prev)}>
         <b>Composition</b>
-        <div style={{float: 'right', fontSize: '16pt'}}>
-          {show_composition ? <ExpandLessIcon/> : <ExpandMoreIcon/> }
-        </div>
+        <CollapseIndicator visible={show_composition} />
       </div>
       <div className="collapsible-content"
         style={{
-          display: show_composition ? 'block' : 'none',
-          width: '100%'
+          display: show_composition ? 'flex' : 'none',
+          maxHeight: '350pt',
         }}
       >
-        <ul style={{ overflow: 'visible' }}>
-          <li><ul style={{maxHeight: '320pt', overflowY: 'scroll'}}>{
+        <div className="molecule-tile-grid">
+          {
             config.mixture.length === molecules.length ?
               composition.map((i) => {
                 return (
                   <li
                     className="molecule-tile"
-                    style={{background: '#eee', color: 'black', height: '150pt'}}
+                    style={{
+                      background: '#eee',
+                      color: 'black',
+                      height: '150pt'
+                    }}
                   >
                     <button
                       className="App-button"
@@ -84,10 +85,13 @@ const MolList: React.FC<IMolList> =
                       <CloseIcon/>
                     </button>
                     <div style={{
-                      marginLeft: 'auto', marginRight: 'auto',
-                      marginTop: 'auto', marginBottom: 'auto',
-                      width: '90pt', height: '90pt',
-                    }}>
+                        marginLeft: 'auto', marginRight: 'auto',
+                        marginTop: 'auto', marginBottom: 'auto',
+                        width: '90pt', height: '90pt',
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => setShowMolecule2d(i)}
+                    >
                       <div style={{height: '100%', display: 'inline-block', verticalAlign: 'middle'}}/>
                       <img
                         style={{
@@ -150,44 +154,45 @@ const MolList: React.FC<IMolList> =
                     </div>
                 </li>);
             })
-            : ""
+            : null
           }
-          <li className="molecule-tile">
+          {running ? "" :
             <button
               onClick={() => setPickMol(true)}
-              className="molecule-tile"
-              style={{
-                color: 'white',
-                width: '100%', height: '150pt',
-                borderRadius: 0,
-                background: 'transparent',
-                borderColor: '#eee',
-                cursor: 'pointer'
-              }}
-              disabled={running}
+              className="molecule-tile add-molecule-button"
             >
               <AddIcon fontSize='large'/>
             </button>
-          </li>
-        </ul></li>
-      </ul>
+          }
+        </div>
     </div>
     <div
-      className="molecule-picker"
-      style={{display: pick_mol ? "block" : "none"}}
+      className="molecule-picker-surround"
+      style={{display: pick_mol ? "flex" : "none"}}
       onClick={() => setPickMol(false)}
     >
-      <ul><li>
-        <ul>{
-          config.mixture.length === molecules.length ?
+      <div className="molecule-picker">
+        <div className="collapsible">
+          <b>Add Molecule</b>
+          <div
+            className="App-button"
+            style={{
+              textAlign: 'center',
+              width: '20pt',
+              height: '18pt',
+              float: 'right',
+            }}
+          >
+            <CloseIcon/>
+          </div>
+        </div>
+        <div className="molecule-tile-grid">
+          { config.mixture.length === molecules.length ?
             config.mixture.map((mol, i) => {
               return mol.ratio > 0 ? ""
-                : (<li className="molecule-tile">
+                : (
                   <button
-                    style={{
-                      width: '100%', height: '130pt',
-                      borderStyle: 'none'
-                    }}
+                    className="molecule-tile molecule-tile-clickable"
                     disabled={running}
                     onClick={() => {
                       setPickMol(false);
@@ -216,13 +221,49 @@ const MolList: React.FC<IMolList> =
                       {molecules[i].name}
                     </div>
                   </button>
-                </li>)
+                )
             })
-          : ""
-        }</ul>
-      </li></ul>
+          : null
+        }
+        </div>
+      </div>
     </div>
-  </div>);
+    <div
+      className="molecule-picker-surround"
+      style={{
+          display: show_molecule_2d === null ? "none" : "flex",
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      onClick={() => setShowMolecule2d(null)}
+    >
+        {show_molecule_2d !== null ?
+          <div>
+            <div className="collapsible">
+              <b>{molecules[show_molecule_2d].name} - {format_formula(molecules[show_molecule_2d].formula)}</b>
+              <div
+                className="App-button"
+                style={{
+                  textAlign: 'center',
+                  width: '20pt',
+                  height: '18pt',
+                  float: 'right',
+                }}
+              >
+                <CloseIcon/>
+              </div>
+            </div>
+            <img style={{
+                maxHeight: '90%',
+                minWidth: '30vw', background: '#eee',
+              }}
+              width='auto' height='auto'
+              src={"molecules/" + molecules[show_molecule_2d].formula + '.png'}
+            />
+          </div> : null
+        }
+    </div>
+  </>);
 }
 
 export default MolList;
