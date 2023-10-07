@@ -2,6 +2,7 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  overflow: hidden;
   justify-items: flex-start;
   background-color: #222; /*#282c34;*/
 }
@@ -59,49 +60,56 @@
 }
 
 .view-container {
-  display: flex;
-  flex-direction: right;
-  align-items: stretch;
+  display: grid;
+  grid-template-columns: 0.42fr 0.58fr;
   background-color: #222;
-  flex-grow: 2;
+  gap: 10pt;
+  flex-grow: 1;
 }
 
 .tab-container {
-  flex-grow: 45;
   display: flex;
   flex-direction: row;
   align-items: top;
-  /* justify-items: left; */
   border: none;
-  /* width: 42%; */
 }
 
 .tab-buttons {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-items: top;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-auto-rows: min-content;
+  row-gap: 1pt;
+  padding-left: 5pt;
   background-color: #222;
+  border-right-color: #444;
+  border-right-style: solid;
+  border-right-width: 3pt;
 }
 
 .tab-button {
   margin: 0;
-  margin-left: 12pt;
-  font-size: 14pt;
+  margin-left: 10pt;
+  font-size: 12pt;
   padding: 10pt;
   background-color: #333;
   color: white;
   cursor: pointer;
+  border: none;
+  border-radius: 0;
   /* writing-mode: vertical-lr; */
   /* text-orientation: sideways; */
   /* transform: translate(14pt, 0) rotate(180deg); */
 }
-.tab-button:hover {
+.tab-button:not([disabled]):hover {
   background-color: #444;
+}
+.tab-button:disabled {
+  cursor: default;
+  color: #bbb;
 }
 
 .tab-button-selected {
-  margin-left: 5pt;
+  margin-left: 0;
   background-color: #444;
 }
 
@@ -110,13 +118,10 @@
   display: block;
   flex-direction: row;
   align-items: flex-start;
-  border-left-color: #444;
-  border-left-style: solid;
-  border-left-width: 5pt;
 }
 
+
 .vis-container {
-  flex-grow: 55;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -130,7 +135,6 @@
   padding: 10pt;
   margin: 0;
   margin-top: 10pt;
-  margin-left: 14pt;
   flex-direction: column;
   align-items: stretch;
   justify-content: top;
@@ -260,6 +264,68 @@
   background-color: #b32d00;
 }
 
+.roughness {
+  background-color: #002699;
+}
+.roughness:hover {
+  background-color: #002db3;
+}
+
+.toggle-slider {
+  position: relative;
+  display: inline-block;
+  width: 32pt;
+  height: 14pt;
+}
+
+/* Hide default HTML checkbox */
+.toggle-slider input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+/* The slider */
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  border-radius: 14pt;
+  -webkit-transition: .2s;
+  transition: .2s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 10pt;
+  width: 10pt;
+  left: 4pt;
+  bottom: 2pt;
+  background-color: white;
+  border-radius: 50%;
+  -webkit-transition: .2s;
+  transition: .2s;
+}
+
+input:checked + .slider {
+  background-color: #2196F3;
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1pt #2196F3;
+}
+
+input:checked + .slider:before {
+  -webkit-transform: translateX(14pt);
+  -ms-transform: translateX(14pt);
+  transform: translateX(14pt);
+}
+
 @keyframes App-logo-spin {
   from {
     transform: rotate(0deg);
@@ -270,7 +336,6 @@
 }
 
 .molecule-tile {
-  width: '100%';
   background-color: '#eee';
   color: 'white';
   text-align: center;
@@ -300,7 +365,7 @@
   background-color: transparent;
   display: grid;
   gap: 10pt;
-  grid-template-columns: repeat( auto-fill, minmax(150pt, 1fr));
+  grid-template-columns: repeat( auto-fill, minmax(130pt, 1fr));
   grid-auto-rows: 150pt;
   overflow-y: scroll;
   min-height: 150pt;
@@ -314,13 +379,73 @@
   text-align: left;
   outline: none;
   font-size: 14pt;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+.collapsible:hover {
+  background-color: #555;
+}
+.no-hover {
+  cursor: default;
+}
+.no-hover:hover {
+  background-color: #444;
 }
 
-.active, .collapsible:hover {
-  background-color: #555;
+.number-spin-container {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-button {
+  padding: 0;
+  color: white;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  text-align: center;
+  align-items: center;
+  justify-content: center;
+}
+.icon-button:not([disabled]):hover {
+  color: #bbb;
+}
+.icon-button:disabled {
+  cursor: default;
+}
+.inverted {
+  color: black;
+}
+.inverted:not([disabled]):hover {
+  color: #444;
+}
+
+.header {
+  float: right;
+  margin-left: auto;
+  font-size: 16pt;
+}
+
+.corner-button {
+  margin: 4pt;
+}
+
+.hover-red:not([disabled]):hover {
+  color: #b32d00;
+}
+.hover-blue:not([disabled]):hover {
+  color: #002db3;
 }
 
 .collapsible-content {
+  display: flex;
+  padding-top: 10pt;
+  padding-bottom: 10pt;
   flex-direction: column;
   align-items: stretch;
   justify-items: flex-start;
@@ -328,6 +453,13 @@
   overflow-x: hidden;
   overflow-y: auto;
   background-color: #333;
+}
+
+.flex-row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  justify-items: left;
 }
 
 .molecule-picker {
@@ -343,9 +475,10 @@
 }
 
 .molecule-picker-surround {
+  display: flex;
   flex-direction: column;
   align-items: center;
-  justify-items: center;
+  justify-content: center;
   background-color: rgba(0,0,0,0.7);
   position: fixed;
   top: 0;

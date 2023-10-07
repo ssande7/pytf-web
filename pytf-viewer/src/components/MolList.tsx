@@ -68,14 +68,7 @@ const MolList: React.FC<IMolList> =
                     }}
                   >
                     <button
-                      className="App-button"
-                      style={{
-                        color: 'black',
-                        textAlign: 'center',
-                        width: '20pt',
-                        height: '18pt',
-                        float: 'right',
-                      }}
+                      className="icon-button inverted header corner-button hover-red"
                       disabled={running}
                       onClick={() => {
                         update_ratio(i, 0);
@@ -106,17 +99,8 @@ const MolList: React.FC<IMolList> =
                       {format_formula(molecules[i].formula, '8pt')}<br/>
                       {molecules[i].name}
                     </div>
-                    <div style={{
-                          marginLeft: 'auto', marginRight: 'auto',
-                          marginTop: 'auto', marginBottom: 'auto',
-                      }}
-                    >
-                      <button className="App-button"
-                        style={{
-                          color: 'black',
-                          verticalAlign: 'middle',
-                          display: 'inline-block'
-                        }}
+                    <div className="number-spin-container">
+                      <button className="icon-button inverted hover-blue"
                         disabled={running}
                         onClick={() => {
                           if (config.mixture[i].ratio > 1)
@@ -128,12 +112,9 @@ const MolList: React.FC<IMolList> =
                         inputMode="numeric"
                         style={{
                           fontSize: '12pt',
-                          verticalAlign: 'middle',
                           textAlign: 'center',
-                          display: 'inline-block'
                         }}
                         min = {1} size = {4}
-                        width = "80%"
                         disabled = {running}
                         value = {config.mixture[i].ratio}
                         onChange={(e) => {
@@ -142,12 +123,7 @@ const MolList: React.FC<IMolList> =
                           update_ratio(i, ratio > 0 ? ratio : 1);
                         }}
                       />
-                      <button className="App-button"
-                        style={{
-                          color: 'black',
-                          verticalAlign: 'middle',
-                          display: 'inline-block'
-                        }}
+                      <button className="icon-button inverted hover-blue"
                         disabled={running}
                         onClick={() => update_ratio(i, config.mixture[i].ratio+1)}
                       ><AddIcon/></button>
@@ -172,17 +148,9 @@ const MolList: React.FC<IMolList> =
       onClick={() => setPickMol(false)}
     >
       <div className="molecule-picker">
-        <div className="collapsible">
+        <div className="collapsible no-hover">
           <b>Add Molecule</b>
-          <div
-            className="App-button"
-            style={{
-              textAlign: 'center',
-              width: '20pt',
-              height: '18pt',
-              float: 'right',
-            }}
-          >
+          <div className="icon-button header">
             <CloseIcon/>
           </div>
         </div>
@@ -232,24 +200,14 @@ const MolList: React.FC<IMolList> =
       className="molecule-picker-surround"
       style={{
           display: show_molecule_2d === null ? "none" : "flex",
-          justifyContent: 'center',
-          alignItems: 'center',
         }}
       onClick={() => setShowMolecule2d(null)}
     >
         {show_molecule_2d !== null ?
           <div>
-            <div className="collapsible">
+            <div className="collapsible no-hover">
               <b>{molecules[show_molecule_2d].name} - {format_formula(molecules[show_molecule_2d].formula)}</b>
-              <div
-                className="App-button"
-                style={{
-                  textAlign: 'center',
-                  width: '20pt',
-                  height: '18pt',
-                  float: 'right',
-                }}
-              >
+              <div className="icon-button header" >
                 <CloseIcon/>
               </div>
             </div>

@@ -113,20 +113,9 @@ const Composition: React.FC<IComposition>
         <CollapseIndicator visible={protocol_visible} />
       </div>
       <div className="collapsible-content"
-        style={{
-          paddingTop: '10pt',
-          paddingBottom: '10pt',
-          display: protocol_visible ? "flex" : "none",
-          flexDirection: 'column',
-          alignItems: 'stretch',
-        }}
+        style={{ display: protocol_visible ? "flex" : "none" }}
       >
-          <div style={{
-            display: 'flex',
-            flexDirection: 'row',
-            alignItems: 'stretch',
-            justifyItems: 'left'
-          }}>
+          <div className="flex-row">
             <div style={{marginRight: 'auto'}}>Deposition velocity:</div>
             <div>{config.deposition_velocity} nm/ps</div>
           </div>

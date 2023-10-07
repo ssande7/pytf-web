@@ -8,7 +8,7 @@ interface ICollapse {
 
 const CollapseIndicator: React.FC<ICollapse> = ({ visible }) => {
   return (
-    <div style={{float: 'right', fontSize: '16pt'}}>
+    <div className="icon-button header">
       {visible ? <ExpandLessIcon/> : <ExpandMoreIcon/> }
     </div>
   );
