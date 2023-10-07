@@ -148,12 +148,15 @@ interface IVis {
   particles: Array<Particles>,
   num_frames: number,
   height_map: Float32Array | null,
+  show_height_map: boolean,
   num_bins: number,
   roughness: number | null,
   mean_height: number | null,
+  new_roughness: boolean,
+  setNewRoughness: React.Dispatch<React.SetStateAction<boolean>>,
 }
 
-const Vis: React.FC<IVis> = ({socket, running, particles, num_frames, height_map, num_bins, roughness, mean_height }) => {
+const Vis: React.FC<IVis> = ({socket, running, particles, num_frames, height_map, show_height_map, num_bins, roughness, mean_height, new_roughness, setNewRoughness }) => {
   const [vis, setVis] = useState<Visualizer | null>(null);
   const [loadingVis, setLoadingVis] = useState(false);
   const domElement = useRef<HTMLDivElement | null>(null);
@@ -200,7 +203,6 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames, height_map
     if (prevParticles && prevParticles !== particles[frame]) {
       console.log("Cleaning up particles");
       vis.remove(prevParticles)
-      prevParticles.dispose()
     }
     if (frame < particles.length) {
       vis.add(particles[frame])
@@ -290,7 +292,7 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames, height_map
       }
     }
     height_map_disp.length = 0;
-    if (height_map !== null && mean_height !== null && roughness !== null) {
+    if (show_height_map && height_map !== null && mean_height !== null && roughness !== null) {
       const vertices = new Float32Array([
         0, 0, 0,
         Lx/num_bins, 0, 0,
@@ -325,17 +327,25 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames, height_map
           vis.scene.add(height_map_disp[x*num_bins+z])
         }
       }
-      // Jump to final frame and disable looping
+    }
+    setHeightMapDisp(height_map_disp);
+
+    // Deliberately not reacting on num_bins change
+  }, [height_map, show_height_map, height_map_disp, mean_height, roughness, setHeightMapDisp, particles, setFrame, setLoop]);
+
+  // Jump to final frame and disable looping
+  // if we just calculated a height map
+  useEffect(() => {
+    if (!new_roughness) return;
+    setNewRoughness(false);
+    if (show_height_map) {
       setLoop(false);
       loopRef.current = false;
       const final_frame = particles.length - 1;
       frameRef.current = final_frame;
       setFrame(final_frame);
     }
-    setHeightMapDisp(height_map_disp);
-
-    // Deliberately not reacting on num_bins change
-  }, [height_map, height_map_disp, mean_height, roughness, setHeightMapDisp, particles, setFrame, setLoop]);
+  }, [new_roughness, setNewRoughness]);
 
   return (
     <div className="MD-vis" >
@@ -399,7 +409,7 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames, height_map
 }
 
 interface IRoughness {
-  particles: Particles,
+  particles: Particles | null,
   num_bins: number,
   setNumBins: React.Dispatch<React.SetStateAction<number>>,
   roughness: number | null,
@@ -407,10 +417,19 @@ interface IRoughness {
   mean_height: number | null,
   setMeanHeight: React.Dispatch<React.SetStateAction<number | null>>,
   setHeightMap: React.Dispatch<React.SetStateAction<Float32Array | null>>,
+  setShowHeightMap: React.Dispatch<React.SetStateAction<boolean>>,
+  setNewRoughness: React.Dispatch<React.SetStateAction<boolean>>,
 }
-const Roughness: React.FC<IRoughness> = ({ particles, num_bins, setNumBins, roughness, setRoughness, mean_height, setMeanHeight, setHeightMap }) => {
+const Roughness: React.FC<IRoughness> = ({ particles, num_bins, setNumBins, roughness, setRoughness, mean_height, setMeanHeight, setHeightMap, setShowHeightMap, setNewRoughness }) => {
   const [min_height, setMinHeight] = useState<number>(0);
   function calcRoughness() {
+    if (particles === null) {
+      setHeightMap(null);
+      setMeanHeight(null);
+      setMinHeight(0);
+      setRoughness(null);
+      return;
+    }
     console.log("Calculating roughness");
     const bins_sq = num_bins * num_bins;
     var height_map = new Float32Array(bins_sq).fill(0);
@@ -445,39 +464,49 @@ const Roughness: React.FC<IRoughness> = ({ particles, num_bins, setNumBins, roug
     setHeightMap(height_map);
     setMeanHeight(mean_height);
     setMinHeight(min_ht);
-    setRoughness(roughness)
+    setRoughness(roughness);
+    setNewRoughness(true);
   }
 
-  return (<>
-    <h3>Roughness</h3>
-    <div className="MD-vis-controls">
-      <div>Bins per direction:</div>
-      <div className="HorizontalSpacer"/>
-      <div>{num_bins}</div>
+  return (<div className="MD-param-group">
+    <div className="collapsible no-hover">
+      <b>Roughness</b>
     </div>
-    <input type="range" min={1} max={20} defaultValue={10}
-      onChange = {
-        (e) => setNumBins(e.target.valueAsNumber)
-      }
-    />
-    <br/>
-    <div className="MD-vis-controls">
-      <div>Mean film thickness:</div>
-      <div className="HorizontalSpacer"/>
-      <div>{mean_height !== null ? (mean_height - min_height).toFixed(3) + ' nm' : ''}</div>
+    <div className="collapsible-content">
+      <div className="flex-row">
+        <div style={{marginRight: 'auto'}}>Bins per side:</div>
+        <div>{num_bins}</div>
+      </div>
+      <input type="range" min={1} max={20} defaultValue={10}
+        onChange = {
+          (e) => setNumBins(e.target.valueAsNumber)
+        }
+      />
+      <br/>
+      <div className="flex-row" style={{marginTop: '10pt'}}>
+        <div style={{marginRight: 'auto'}}>Show height map:</div>
+        <label className="toggle-slider">
+          <input type="checkbox" defaultChecked={true}
+            onChange = {(e) => setShowHeightMap(e.target.checked)}
+          />
+          <span className="slider"></span>
+        </label>
+      </div>
+      <div className="flex-row" style={{marginTop: '20pt'}}>
+        <div style={{marginRight: 'auto'}}>Mean film thickness:</div>
+        <div>{mean_height !== null ? (mean_height - min_height).toFixed(3) + ' nm' : '???'}</div>
+      </div>
+      <div className="flex-row">
+        <div style={{marginRight: 'auto'}}>Roughness:</div>
+        <div>{roughness !== null ? roughness.toFixed(3) + ' nm' : '???'}</div>
+      </div>
     </div>
-    <div className="MD-vis-controls">
-      <div>Roughness:</div>
-      <div className="HorizontalSpacer"/>
-      <div>{roughness !== null ? roughness.toFixed(3) + ' nm' : ''}</div>
-    </div>
-    <p/>
-    <button
+    <button className="submit-button roughness"
       onClick={calcRoughness}
     >
-      Calculate Roughness
+      <b>Calculate Roughness</b>
     </button>
-  </>);
+  </div>);
 }
 
 interface IViewer {
@@ -503,6 +532,10 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
   const [roughness, setRoughness] = useState<number | null>(null);
   const [mean_height, setMeanHeight] = useState<number | null>(null);
   const [height_map, setHeightMap] = useState<Float32Array | null>(null);
+  const [show_height_map, setShowHeightMap] = useState(true);
+  const [new_roughness, setNewRoughness] = useState(false);
+
+  const [current_tab, setCurrentTab] = useState(0);
 
   useEffect(() => {
     let ws_url = window.location.href.replace(new RegExp("^http"), "ws");
@@ -583,6 +616,7 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
             setRunning(false);
             setRoughnessReady(true);
             setParticlesRoughness(particles[particles.length-1]);
+            setCurrentTab(1);
           }
         }
       }).catch(console.error);
@@ -624,6 +658,51 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
       particles, sim_done,
     ]);
 
+  const tabs = [
+    {
+      name: "Simulation",
+      enable: true,
+      content:
+        <Composition
+          socket={socket} socket_connected={socket_connected}
+          running={running} setRunning={setRunning}
+          resetTrajectory={() => {
+            console.log("Resetting trajectory");
+            setSimDone(false);
+            setNextSegment(1);
+            setLatestSegment(0);
+            setLastFrame(0);
+            setWaitForSegment(false);
+            particles.map((p) => p.dispose());
+            particles.length = 0;
+            setParticles(particles);
+            setRoughness(null);
+            setMeanHeight(null);
+            setHeightMap(null);
+            setRoughnessReady(false);
+          }}
+        />
+      },
+      {
+        name: "Roughness",
+        enable: roughness_ready && particles_roughness,
+        content:
+          <Roughness
+            particles={particles_roughness}
+            num_bins={num_bins} setNumBins={setNumBins}
+            roughness={roughness} setRoughness={setRoughness}
+            mean_height={mean_height} setMeanHeight={setMeanHeight}
+            setHeightMap={setHeightMap} setShowHeightMap={setShowHeightMap}
+            setNewRoughness={setNewRoughness}
+          />
+    },
+    {
+      name: "Help",
+      enable: true,
+      content: "TODO"
+    },
+  ];
+
   return (
     <>
       <div className="App">
@@ -645,51 +724,33 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
         <div className="view-container">
           <div className="tab-container">
             <div className="tab-buttons">
-              <p className="tab-button tab-button-selected">
-                <b>Simulation</b>
-              </p>
-              <p className="tab-button">
-                <b>Roughness</b>
-              </p>
+              { tabs.map((tab, i) => { return (
+                <button className={"tab-button" +
+                  (i === current_tab ? " tab-button-selected" : "")}
+                  onClick={() => setCurrentTab(i)}
+                  disabled={!tab.enable}
+                >
+                  <b>{tab.name}</b>
+                </button>)
+              })}
             </div>
-            <div className="MD-params">
-              <Composition
-                socket={socket} socket_connected={socket_connected}
-                running={running} setRunning={setRunning}
-                resetTrajectory={() => {
-                  console.log("Resetting trajectory");
-                  setSimDone(false);
-                  setNextSegment(1);
-                  setLatestSegment(0);
-                  setLastFrame(0);
-                  setWaitForSegment(false);
-                  particles.length = 0;
-                  setParticles(particles);
-                  setRoughness(null);
-                  setMeanHeight(null);
-                  setHeightMap(null);
-                  setRoughnessReady(false);
-                }}
-              />
-              <p/>
-              {roughness_ready && particles_roughness ?
-                <Roughness
-                  particles={particles_roughness}
-                  num_bins={num_bins} setNumBins={setNumBins}
-                  roughness={roughness} setRoughness={setRoughness}
-                  mean_height={mean_height} setMeanHeight={setMeanHeight}
-                  setHeightMap={setHeightMap}
-                />
-                : null
-              }
-            </div>
+            { tabs.length === 0 ? null : tabs.map((tab, i) => {
+              return <div className="MD-params"
+                style={{display: i === current_tab ? 'flex' : 'none' }}
+              >
+                {tab.content}
+              </div>
+              })
+            }
           </div>
           <div className="vis-container">
             <Vis
               socket={socket} running={running}
               particles={particles} num_frames={last_frame}
-              height_map={height_map} num_bins={num_bins}
-              mean_height={mean_height} roughness={roughness}
+              height_map={height_map} show_height_map={show_height_map}
+              num_bins={num_bins} mean_height={mean_height}
+              roughness={roughness} new_roughness={new_roughness}
+              setNewRoughness={setNewRoughness}
             />
           </div>
         </div>
