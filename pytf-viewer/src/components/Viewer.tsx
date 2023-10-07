@@ -200,12 +200,15 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames, height_map
   useEffect(() => {
     if (!vis) { return }
     console.log("Particles cleanup check triggered");
-    if (prevParticles && prevParticles !== particles[frame]) {
+    if (prevParticles && (particles.length === 0 || prevParticles !== particles[frame])) {
       console.log("Cleaning up particles");
       vis.remove(prevParticles)
     }
     if (frame < particles.length) {
       vis.add(particles[frame])
+    } else {
+      // Reset frame to fix looping when new simulation started
+      setFrame(0);
     }
   }, [particles, particles.length, prevParticles, frame, vis])
 
