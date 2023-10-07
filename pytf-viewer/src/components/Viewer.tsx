@@ -143,8 +143,6 @@ const Composition: React.FC<IComposition>
 }
 
 interface IVis {
-  socket: React.MutableRefObject<WebSocket | null>,
-  running: boolean,
   particles: Array<Particles>,
   num_frames: number,
   height_map: Float32Array | null,
@@ -156,7 +154,7 @@ interface IVis {
   setNewRoughness: React.Dispatch<React.SetStateAction<boolean>>,
 }
 
-const Vis: React.FC<IVis> = ({socket, running, particles, num_frames, height_map, show_height_map, num_bins, roughness, mean_height, new_roughness, setNewRoughness }) => {
+const Vis: React.FC<IVis> = ({particles, num_frames, height_map, show_height_map, num_bins, roughness, mean_height, new_roughness, setNewRoughness }) => {
   const [vis, setVis] = useState<Visualizer | null>(null);
   const [loadingVis, setLoadingVis] = useState(false);
   const domElement = useRef<HTMLDivElement | null>(null);
@@ -166,6 +164,7 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames, height_map
   const [paused, setPaused] = useState(false);
   const [loop, setLoop] = useState(false);
 
+  // Viewport creation
   useEffect(() => {
     if (domElement.current && !loadingVis && !vis) {
       setLoadingVis(true);
@@ -191,6 +190,7 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames, height_map
     }
   }, [vis, domElement, loadingVis])
 
+  // Display current frame
   const prevParticlesRef = useRef<Particles | null>()
   useEffect(() => {
     prevParticlesRef.current = frame < num_frames ? particles[frame] : null;
@@ -212,6 +212,7 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames, height_map
     }
   }, [particles, particles.length, prevParticles, frame, vis])
 
+  // Handle iteration between frames
   const animationSlider = useRef<HTMLInputElement | null>(null);
   const frameRef = useRef(frame);
   const [animationTimer, setAnimationTimer] = useState<NodeJS.Timer | null>(null);
@@ -238,7 +239,6 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames, height_map
       setFrame(new_frame)
     }, 1000.0/fps))
   }
-
 
   function stopAnimation() {
     if (animationTimer) {
@@ -283,9 +283,9 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames, height_map
     if (!paused) startAnimation();
   }, []);
 
-  const [height_map_disp, setHeightMapDisp] = useState<Array<Mesh>>([]);
 
   // Calculate tiles to display heat map
+  const [height_map_disp, setHeightMapDisp] = useState<Array<Mesh>>([]);
   useEffect(() => {
     if (!vis) { return }
     if (height_map_disp.length > 0) {
@@ -332,7 +332,6 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames, height_map
       }
     }
     setHeightMapDisp(height_map_disp);
-
     // Deliberately not reacting on num_bins change
   }, [height_map, show_height_map, height_map_disp, mean_height, roughness, setHeightMapDisp, particles, setFrame, setLoop]);
 
@@ -355,17 +354,18 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames, height_map
       <div
         style={{
           height: '400pt', minHeight: '200pt', maxHeight: '80vh',
-          backgroundColor: '0x606160'
+          backgroundColor: '0x333'
         }}
         ref={domElement}>
       </div>
-      <div id="controls" className="MD-vis-controls"
-        style={{width: '100%', padding: 0}}>
-        <div style={{padding: '12pt', display: 'flex', flexDirection: 'column', alignContent: 'middle', height: '16pt'}}>
-          <button className={paused ? "PlayButton play" : "PlayButton pause"} onClick={toggleAnimation} />
+      <div className="MD-vis-controls">
+        <div className="icon-button">
+          <button className={paused ? "play-button play" : "play-button pause"}
+            onClick={toggleAnimation}
+          />
         </div>
         <input type="range" min="0" max={particles.length > 0 ? particles.length-1 : 0} defaultValue='0' ref={animationSlider}
-          style={{verticalAlign: 'middle', flexGrow: 8}}
+          style={{flexGrow: 8, marginRight: '12pt'}}
           onInput={(e) => {
             if (!paused) {stopAnimation()}
             const new_frame = e.currentTarget.valueAsNumber
@@ -374,36 +374,37 @@ const Vis: React.FC<IVis> = ({socket, running, particles, num_frames, height_map
             if (!paused) {startAnimation()}
           }}
         />
-          <div className="HorizontalSpacer" style={{minWidth: '12pt', maxWidth: '12pt'}}/>
-        <div className="MD-vis-controls" style={{flexGrow: 1, maxWidth: '15%', fontSize: '16pt'}}>
-          <button className="App-button" style={{fontSize: '16pt'}} onClick={toggleLoop} title="Toggle playback loop">
-            {loop ? <RepeatOnIcon/> : <RepeatIcon/>}
-          </button>
-          <div className="HorizontalSpacer" style={{minWidth: '5pt', maxWidth: '5pt'}}/>
-          <div title="Playback speed"
-            className="VertCenteredIcon"
-            style={{cursor: 'default'}}
-          >
-            <SpeedIcon/>
-          </div>
-          <div className="HorizontalSpacer" style={{minWidth: '5pt'}}/>
-          <input type="range" min={5} max={30}
-            style={{flexGrow: 4, maxWidth: '80%', verticalAlign: 'middle'}}
-            defaultValue={fps}
-            onChange={(e) => {
-              if (e.target.value) {
-                setFps(e.target.valueAsNumber)
-              }
-            }}
-          />
+        <button className="icon-button"
+          onClick={toggleLoop}
+          title="Toggle playback loop"
+        >
+          {loop ? <RepeatOnIcon/> : <RepeatIcon/>}
+        </button>
+        <div title="Playback speed"
+          className="icon-button display-only"
+          style={{marginLeft: '10pt', marginRight: '2pt'}}
+        >
+          <SpeedIcon/>
         </div>
-        <div className="HorizontalSpacer" />
-        <button className="App-button" style={{maxWidth: '16pt'}}
-          onClick={resetCamera} title="Reset camera to initial position">
+        <input type="range" min={5} max={30}
+          style={{flexGrow: 4, maxWidth: '10%', marginRight: '12pt'}}
+          defaultValue={fps}
+          onChange={(e) => {
+            if (e.target.value) {
+              setFps(e.target.valueAsNumber)
+            }
+          }}
+        />
+        <button className="icon-button"
+          title="Reset camera to initial position"
+          onClick={resetCamera}
+        >
           <VisibilityOutlinedIcon/>
         </button>
-        <div className="HorizontalSpacer" style={{maxWidth: '5pt'}}/>
-        <button className="App-button" style={{maxWidth: '16pt'}} title="Save deposition movie">
+        <button className="icon-button"
+          title="Save deposition movie"
+          style={{marginLeft: '6pt'}}
+        >
           <SaveOutlinedIcon/>
         </button>
       </div>
@@ -748,7 +749,6 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
           </div>
           <div className="vis-container">
             <Vis
-              socket={socket} running={running}
               particles={particles} num_frames={last_frame}
               height_map={height_map} show_height_map={show_height_map}
               num_bins={num_bins} mean_height={mean_height}
