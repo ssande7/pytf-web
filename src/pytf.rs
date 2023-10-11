@@ -57,11 +57,12 @@ impl Pytf {
             if self.run_id == self.final_run_id - 1 {
                 self.deposition.setattr(py, intern!(py, "insertions_per_run"), 0)?;
             }
-            if self.deposition.call_method0(py, "cycle")?.extract(py)? {
-                self.run_id = self.deposition.getattr(py, intern!(py, "run_ID"))?.extract(py)?;
-                Ok(())
-            } else {
-                Err(PytfError::CycleFailed.into())
+            match self.deposition.call_method0(py, intern!(py, "cycle"))?.extract::<bool>(py) {
+                Ok(_) => {
+                    self.run_id = self.deposition.getattr(py, intern!(py, "run_ID"))?.extract(py)?;
+                    Ok(())
+                }
+                _ => Err(PytfError::CycleFailed.into())
             }
         })
     }
