@@ -1,0 +1,9 @@
+nginx
+redis
+python3
+python3-devel
+openssl-devel
+cmake
+gcc
+gcc-c++
+npm
