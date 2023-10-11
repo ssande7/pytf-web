@@ -134,10 +134,14 @@ async fn main() -> std::io::Result<()> {
                     .build(),
             )
             // SessionMiddleware must be mounted *after* IdentityMiddleware
-            .wrap(SessionMiddleware::new(
-                redis_store.clone(),
-                secret_key.clone(),
-            ))
+            .wrap(
+                SessionMiddleware::builder(
+                    redis_store.clone(),
+                    secret_key.clone(),
+                )
+                .cookie_secure(false)
+                .build()
+            )
             .wrap(cors)
             .service(web::resource("/").to(index))
             .service(login)
