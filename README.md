@@ -26,6 +26,21 @@ $ cmake .. -DUSE_OWN_FFTW=ON
 $ make -j$(nproc)
 $ sudo make install
 ```
+6. Configure nginx (optional):
+```
+    root            /path/to/pytf-web/pytf-viewer/public;
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+    }
+
+    location /socket {
+        proxy_pass http://127.0.0.1:8080/socket;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 300s;
+    }
+```
 
 ## Running
 
