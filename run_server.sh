@@ -8,5 +8,5 @@ nginx -s reload || echo "WARNING: nginx not detected or failed to reload configu
 
 # Start the server
 redis-server&
-cargo run --release pytf-server -- -u "${users}"
+cargo run --release --bin pytf-server -- -u "${users}"
 
