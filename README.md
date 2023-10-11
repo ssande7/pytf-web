@@ -43,7 +43,7 @@ including the special "worker" user.
 It is assumed that user accounts only persist for the duration of a workshop, and
 that passwords will be changed between workshops.
 
-To start the server, including Redis and a reload of the nginx configuration if it's in use:
+To start the server, including Redis:
 ```
 $ ./run_server.sh ${users_file}
 ```
