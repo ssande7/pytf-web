@@ -117,8 +117,10 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(move || {
         let cors = Cors::default()
-            .allowed_origin(format!("http://localhost:{port}").as_str())
-            .allowed_origin(format!("http://127.0.0.1:{port}").as_str())
+            // TODO: Can we make this more restrictive?
+            // .allowed_origin(format!("http://localhost:{port}").as_str())
+            // .allowed_origin(format!("http://127.0.0.1:{port}").as_str())
+            .allow_any_origin()
             .allowed_methods(vec!["GET", "POST"])
             .allowed_headers(vec![
                 http::header::AUTHORIZATION,
