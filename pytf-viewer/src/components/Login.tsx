@@ -47,26 +47,33 @@ const Login: React.FC<ILogin> = ({ setToken }) => {
   }
 
   return (
-    <>
-      <div className="App">
-        <div className="App-header">
-          <h1>Vacuum Deposition</h1>
-          <form onSubmit={handleSubmit}>
+    <div className="App">
+      <div className="login-bg">
+        <div className="login-panel">
+          <form className="login-form" onSubmit={handleSubmit}>
+            <b style={{
+              fontSize: '25pt',
+              verticalAlign: 'center',
+              margin: '0',
+              marginBottom: '20pt',
+              textAlign: 'center',
+            }}>Vacuum Deposition</b>
             <input placeholder="Username" type="text"
               onChange={e => setUsername(e.target.value)}
               autoFocus={true}
             />
-            <br/>
-            <input placeholder="Password" type="password" onChange={e => setPassword(e.target.value)} />
-            <br/>
-            <button type="submit">Login</button>
+            <input placeholder="Password"
+              type="password"
+              onChange={e => setPassword(e.target.value)}
+            />
+            <button className="submit-button roughness" type="submit">Login</button>
           </form>
-          <p>
-            {loginFailed ? "Incorrect username or password!" : ""}
-          </p>
+          <div className="login-fail" style={{display: loginFailed ? 'flex' : 'none'}}>
+            Incorrect username or password!
+          </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 

@@ -174,7 +174,11 @@ const MolList: React.FC<IMolList> =
                       marginTop: 'auto', marginBottom: 'auto',
                       width: '80pt', height: '90pt',
                     }}>
-                      <div style={{height: '100%', display: 'inline-block', verticalAlign: 'middle'}}/>
+                      <div style={{
+                        height: '100%',
+                        display: 'inline-block',
+                        verticalAlign: 'middle'
+                      }}/>
                       <img
                         style={{
                           maxWidth: '100%', maxHeight: '100%',
