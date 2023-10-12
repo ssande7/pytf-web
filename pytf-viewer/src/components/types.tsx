@@ -1,6 +1,6 @@
 
 // Sent by server as list of available components
-// TODO: include image as well?
+// TODO: include geometry for 3D display
 export type MixtureComponentDetailed = {
   res_name: string,
   name: string,

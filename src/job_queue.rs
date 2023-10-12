@@ -1,4 +1,4 @@
-use std::{sync::{Arc, RwLock}, collections::HashMap};
+use std::{sync::{Arc, RwLock, atomic::{AtomicBool, Ordering}}, collections::HashMap};
 use actix::prelude::*;
 use pytf_web::{
     pytf_config::PytfConfig,
@@ -7,7 +7,7 @@ use pytf_web::{
 
 use crate::{
     client_session::{ClientWsSession, ClientForceDisconnect, TrajectoryPing},
-    worker_session::{WorkerWsSession, WorkerPause}
+    worker_session::{WorkerWsSession, WorkerPause, WorkerIdle}
 };
 
 // Client
@@ -61,17 +61,21 @@ pub struct ClientDetails {
 #[rtype(result = "()")]
 pub struct AssignJobs {}
 
-// #[derive(Message)]
-// #[rtype(result = "()")]
-// pub struct TrajectoryPacket {
-//     jobname: Arc<String>,
-//     pub bytes: Vec<u8>,
-// }
-//
-//
+// TODO: tell client when job failed?
 // #[derive(Message)]
 // #[rtype(result = "()")]
 // pub struct JobFailed { jobname: String }
+
+#[derive(Debug, Clone)]
+struct WorkerHandle {
+    addr: Addr<WorkerWsSession>,
+    idle: Arc<AtomicBool>,
+}
+impl WorkerHandle {
+    pub fn new(addr: Addr<WorkerWsSession>) -> Self {
+        Self { addr, idle: Arc::new(AtomicBool::new(true)) }
+    }
+}
 
 
 /// Server for connecting clients to workers and shuttling data
@@ -81,18 +85,13 @@ pub struct JobServer {
     client_sessions: HashMap<Arc<String>, ClientDetails>,
 
     /// Workers connected to this server
-    worker_sessions: Vec<Addr<WorkerWsSession>>,
-
-    idle_workers: Vec<Addr<WorkerWsSession>>,
+    worker_sessions: Vec<WorkerHandle>,
 
     /// Main job storage, indexed by job name (which is unique)
     job_lookup: HashMap<String, Job>,
 
     /// List of unfinished jobs - candidates for work requests
     unfinished_jobs: Vec<Job>,
-
-    /// Helper member for assigning jobs
-    assignment_handler: AssignmentHandler,
 }
 
 impl JobServer {
@@ -110,11 +109,39 @@ impl JobServer {
         Self {
             client_sessions: HashMap::with_capacity(64),
             worker_sessions: Vec::with_capacity(64),
-            idle_workers: Vec::with_capacity(64),
             job_lookup,
             unfinished_jobs: Vec::with_capacity(64),
-            assignment_handler: AssignmentHandler::default(),
         }
+    }
+
+    fn count_idle_workers(&self) -> usize {
+        self.worker_sessions
+            .iter()
+            .filter(|w| w.idle.load(Ordering::Acquire))
+            .count()
+    }
+
+    fn send_job_to_worker(&self, job: JobAssignment, worker: &WorkerHandle, ctx: &mut <Self as Actor>::Context) {
+        let idle = worker.idle.clone();
+        worker.addr.send(job)
+            .into_actor(self)
+            .then(move | res, _act, _ctx| {
+                match res {
+                    Ok(true) => {
+                        log::debug!("Sent new job to worker session");
+                    }
+                    Ok(false) => {
+                        log::warn!("Worker failed to take job");
+                        idle.store(true, Ordering::Release);
+                    }
+                    Err(e) => {
+                        log::error!("Error while sending job assignment: {e}.");
+                        idle.store(true, Ordering::Release); // There's a problem with the worker
+                    }
+                }
+                fut::ready(())
+            })
+            .wait(ctx);
     }
 }
 
@@ -126,7 +153,7 @@ impl Handler<ClientConnect> for JobServer {
     type Result = ();
 
     fn handle(&mut self, msg: ClientConnect, _ctx: &mut Self::Context) -> Self::Result {
-        println!("Client {} connected", msg.id);
+        log::info!("Client {} connected", msg.id);
 
         if let Some(old_session) = self.client_sessions.insert(
             msg.id.clone(), ClientDetails { addr: msg.addr, job: None })
@@ -150,74 +177,50 @@ impl Handler<ClientDisconnect> for JobServer {
     }
 }
 
-#[derive(Debug, Default, Copy, Clone)]
-struct AssignmentHandler {
-    retain: bool,
-    skip: bool,
+impl Handler<WorkerIdle> for JobServer {
+    type Result = ();
+
+    /// Try to send freshly idle worker a new job, or mark it as idle if no jobs available
+    fn handle(&mut self, msg: WorkerIdle, ctx: &mut Self::Context) -> Self::Result {
+        for w in self.worker_sessions.iter() {
+            if w.addr == msg.addr {
+                if let Some(job) = self.unfinished_jobs.iter().filter(|job| is_job_runnable(job)).next() {
+                    log::info!("Assigning new job to finished worker");
+                    self.send_job_to_worker(JobAssignment { job: job.clone(), }, w, ctx);
+                } else {
+                    w.idle.store(true, Ordering::Release);
+                }
+                break
+            }
+        }
+    }
 }
 
-impl AssignmentHandler {
-    #[inline(always)]
-    fn reset(&mut self) {
-        self.retain = true;
-        self.skip = false;
+fn is_job_runnable(job: &Job) -> bool {
+    if let Ok(job) = job.try_read() {
+        return (job.status == JobStatus::Waiting
+        || matches!(job.status, JobStatus::Steal(_))
+    ) && !job.clients.is_empty()
     }
-
-    /// Returns true if assignment loop should move on to next worker
-    #[inline(always)]
-    fn next_worker(&self) -> bool {
-        !self.retain || self.skip
-    }
+    false
 }
-
 
 impl Handler<AssignJobs> for JobServer {
     type Result = ();
 
     fn handle(&mut self, _msg: AssignJobs, ctx: &mut Self::Context) -> Self::Result {
-        println!("Assigning any unallocated jobs");
-        let mut unassigned_jobs = self.unfinished_jobs.iter().filter(|job| {
-            if let Ok(job) = job.try_read() {
-                return (job.status == JobStatus::Waiting
-                    || matches!(job.status, JobStatus::Steal(_))
-                ) && !job.clients.is_empty()
-            }
-            false
-        });
-        // let mut confirm_ctx = Context::new();
-        println!("Currently have {} idle workers", self.idle_workers.len());
-        let mut retain = vec![true; self.idle_workers.len()];
-        for (retain, w) in retain.iter_mut().zip(self.idle_workers.iter()) {
-            // Try sending jobs to an idle worker until it accepts one or we run out of jobs
-            self.assignment_handler.reset();
-            while let Some(job) = unassigned_jobs.next() {
-                println!("Trying to assign job");
-                self.assignment_handler.reset();
-                w.send(JobAssignment { job: job.clone(), })
-                    .into_actor(self)
-                    .then(|res, act, _ctx| {
-                        match res {
-                            Ok(true) => {
-                                println!("Sent new job to worker session");
-                                act.assignment_handler.retain = false;
-                            }
-                            Ok(false) => { println!("Worker failed to take job"); }
-                            Err(e) => {
-                                eprintln!("Error while sending job assignment: {e}.");
-                                act.assignment_handler.skip = true; // There's a problem with the worker, so skip over it
-                            }
-                        }
-                        fut::ready(())
-                    })
-                    .wait(ctx);
-                println!("Got confirmation");
-                if self.assignment_handler.next_worker() { break }
-            }
-            *retain = self.assignment_handler.retain;
-        }
+        log::debug!("Assigning unallocated jobs");
+        let unassigned_jobs = self.unfinished_jobs.iter().filter(|job| is_job_runnable(job));
 
-        let mut ret = retain.iter();
-        self.idle_workers.retain(|_| *ret.next().unwrap());
+        let mut count = 0;
+        for (job, worker) in unassigned_jobs.zip(
+            self.worker_sessions.iter().filter(|w| w.idle.load(Ordering::Acquire))
+        ) {
+            worker.idle.store(false, Ordering::Release);
+            self.send_job_to_worker(JobAssignment { job: job.clone(), }, worker, ctx);
+            count += 1;
+        }
+        log::info!("Assigned {count} jobs");
     }
 }
 
@@ -233,27 +236,27 @@ impl Handler<ClientReqJob> for JobServer {
         if let Some(job) = existing {
             // Attach client to job.
             let mut job_lock = job.write().unwrap();
-            println!("Job with name {} already exists.", job_lock.config.name);
-            println!("Updated timestamp for job {}", job_lock.config.name);
+            log::info!("Job with name {} already exists.", job_lock.config.name);
+            log::debug!("Updated timestamp for job {}", job_lock.config.name);
 
             // If client wasn't already attached to that job, remove them from their old job
             if !job_lock.clients.contains(&msg.client_addr) {
                 job_lock.clients.push(msg.client_addr.clone());
-                println!("Checking client's old job");
+                log::debug!("Checking client's old job");
                 if let Some(old_job) = msg.client_prev_job {
                     let mut old_job = old_job.write().unwrap();
-                    println!("Removing client {} from old job with name {}", msg.client_id, old_job.config.name);
+                    log::debug!("Removing client {} from old job with name {}", msg.client_id, old_job.config.name);
                     old_job.remove_client(&msg.client_addr);
                 }
-                println!("Finished cleaning up after {}", msg.client_id);
+                log::debug!("Finished cleaning up after {}", msg.client_id);
             } // NOTE: Assuming client_map can't get out of sync. Might need a test here if it can.
-            println!("Returning job handle");
+            log::debug!("Returning job handle");
             // Ping the client to let them know there are already frames available
             msg.client_addr.do_send(job_lock.build_ping());
             job.clone()
         } else {
             // Create new job and attach client
-            println!("Creating new job for client {}", msg.client_id);
+            log::info!("Creating new job for client {}", msg.client_id);
             let mut clients = Vec::with_capacity(32);
             clients.push(msg.client_addr.clone());
             // Each frame pack is one cycle worth of data
@@ -269,7 +272,7 @@ impl Handler<ClientReqJob> for JobServer {
             self.unfinished_jobs.push(new_job.clone());
             if let Some(old_job) = msg.client_prev_job {
                 let mut old_job = old_job.write().unwrap();
-                println!("Removing client {} from old job with name {}", msg.client_id, old_job.config.name);
+                log::info!("Removing client {} from old job with name {}", msg.client_id, old_job.config.name);
                 old_job.remove_client(&msg.client_addr);
             }
             new_job
@@ -281,12 +284,11 @@ impl Handler<WorkerConnect> for JobServer {
     type Result = ();
 
     fn handle(&mut self, msg: WorkerConnect, ctx: &mut Self::Context) -> Self::Result {
-        println!("New worker connected");
-        self.worker_sessions.push(msg.addr.clone());
-        self.idle_workers.push(msg.addr);
-        println!("Currently have {} workers, {} of which are idle.",
+        log::info!("New worker connected");
+        self.worker_sessions.push(WorkerHandle::new(msg.addr.clone()));
+        log::debug!("Currently have {} workers, {} of which are idle.",
             self.worker_sessions.len(),
-            self.idle_workers.len()
+            self.count_idle_workers()
         );
         ctx.address().do_send(AssignJobs {});
     }
@@ -296,18 +298,15 @@ impl Handler<WorkerDisconnect> for JobServer {
     type Result = ();
 
     fn handle(&mut self, msg: WorkerDisconnect, _ctx: &mut Self::Context) -> Self::Result {
-        let Some(idx) = self.worker_sessions.iter().position(|w| *w == msg.addr) else {
-            println!("Disconnect message received for unknown worker");
+        let Some(idx) = self.worker_sessions.iter().position(|w| w.addr == msg.addr) else {
+            log::warn!("Disconnect message received for unknown worker");
             return
         };
         let _ = self.worker_sessions.swap_remove(idx);
-        if let Some(idx) = self.idle_workers.iter().position(|w| *w == msg.addr) {
-            let _ = self.idle_workers.swap_remove(idx);
-        };
-        println!("Removed disconnected worker.\n\
-            Currently have {} workers, of which {} are idle.",
+        log::info!("Removed disconnected worker.");
+        log::debug!("Currently have {} workers, of which {} are idle.",
             self.worker_sessions.len(),
-            self.idle_workers.len()
+            self.count_idle_workers()
         );
     }
 }
@@ -325,10 +324,10 @@ impl Handler<UnhandledTrajectorySegment> for JobServer {
     fn handle(&mut self, msg: UnhandledTrajectorySegment, _ctx: &mut Self::Context) -> Self::Result {
         if let Some(job) = self.job_lookup.get(&msg.jobname) {
             if AddSegmentResult::Ok != job_add_seg_and_notify(job, &msg.jobname, msg.segment_id, msg.segment) {
-                eprintln!("Failed to store data for segment {} of job {}", msg.segment_id, msg.jobname);
+                log::error!("Failed to store data for segment {} of job {}", msg.segment_id, msg.jobname);
             }
         } else {
-            eprintln!("Received segment data for unknown job");
+            log::warn!("Received segment data for unknown job");
         }
     }
 }
@@ -382,12 +381,12 @@ impl JobInner {
 
     pub fn remove_client(&mut self, client: &Addr<ClientWsSession>) {
         let Some(client_idx) = self.clients.iter().position(|c| c == client) else {
-            println!("Tried to remove client that wasn't attached");
+            log::warn!("Tried to remove client that wasn't attached");
             return
         };
         self.clients.swap_remove(client_idx);
         if self.clients.is_empty() {
-            println!("Job with name {} is now empty.", self.config.name);
+            log::info!("Job with name {} is now empty.", self.config.name);
             if let JobStatus::Running(worker) = &self.status {
                 worker.do_send(WorkerPause { jobname: self.config.name.clone() });
                 self.status = JobStatus::Paused(worker.clone());
@@ -400,22 +399,22 @@ impl JobInner {
     -> AddSegmentResult {
         let jobname = expected_name.as_ref();
         if self.config.name != jobname {
-            println!("Received frame data for different job. Expected {jobname}, got {}", self.config.name);
+            log::warn!("Received frame data for different job. Expected {jobname}, got {}", self.config.name);
             return AddSegmentResult::WrongJob(UnhandledTrajectorySegment { jobname: jobname.to_string(), segment_id, segment });
         }
         if segment_id > self.segments.len() {
-            println!("Received segment ID of {segment_id} beyond end of expected segments ({})", self.segments.len());
+            log::error!("Received segment ID of {segment_id} beyond end of expected segments ({})", self.segments.len());
             return AddSegmentResult::IdTooLarge;
         }
         // segment_id is 1-based
         if self.segments[segment_id - 1].replace(segment).is_some() {
-            println!("WARNING: Received duplicate of segment {segment_id} for trajectory {}", self.config.name);
+            log::warn!("Received duplicate of segment {segment_id} for trajectory {}", self.config.name);
         } else {
-            println!("Stored segment {segment_id} of {} for job {}", self.segments.len(), self.config.name);
+            log::info!("Stored segment {segment_id} of {} for job {}", self.segments.len(), self.config.name);
         }
         if segment_id > self.latest_segment {
             self.latest_segment = segment_id;
-            println!("Latest segment updated for job {}.", self.config.name);
+            log::debug!("Latest segment updated for job {}.", self.config.name);
         }
         AddSegmentResult::Ok
     }
@@ -430,7 +429,7 @@ impl JobInner {
     /// Ping clients interested in job about new trajectory frame
     pub fn notify_clients(&self) {
         let ping = self.build_ping();
-        println!("Sending ping: {ping:?}");
+        log::info!("Sending ping: {ping:?}");
         for client in &self.clients {
             client.do_send(ping);
         }

@@ -33,7 +33,7 @@ async fn index() -> impl Responder {
 
 #[post("/login")]
 async fn login(request: HttpRequest, credentials: web::Json<UserCredentials>) -> impl Responder {
-    println!("Received login request with credentials: {credentials:?}");
+    log::debug!("Received login request.");
     if !authentication::USER_DB
         .get()
         .unwrap()
@@ -45,7 +45,7 @@ async fn login(request: HttpRequest, credentials: web::Json<UserCredentials>) ->
     match Identity::login(&request.extensions(), credentials.get_id()) {
         Ok(user) => {
             let user_id = user.id().unwrap();
-            println!("Logged in ({user_id})");
+            log::info!("Logged in ({user_id})");
             HttpResponse::Ok().json(LoginToken::from(user_id))
         }
         Err(e) => HttpResponse::ExpectationFailed().body(format!("{e}")),
@@ -55,7 +55,7 @@ async fn login(request: HttpRequest, credentials: web::Json<UserCredentials>) ->
 #[post("/logout")]
 async fn logout(user: Identity) -> impl Responder {
     let user_id = user.id().unwrap();
-    println!("Logged out ({user_id})");
+    log::info!("Logged out ({user_id})");
     user.logout();
     HttpResponse::Ok()
 }
@@ -63,7 +63,7 @@ async fn logout(user: Identity) -> impl Responder {
 #[post("/user-token")]
 async fn user_token(user: Identity) -> impl Responder {
     let user_id = user.id().unwrap();
-    println!("Sending cached token ({})", user_id);
+    log::info!("Sending cached token ({})", user_id);
     HttpResponse::Ok().json(LoginToken::from(user_id))
 }
 
@@ -97,6 +97,8 @@ async fn molecules(_user: Identity) -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    env_logger::init();
+
     // Load user database
     let _ = authentication::USER_DB.set(UserDB::from_cli_or_default(std::env::args()));
 

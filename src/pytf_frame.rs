@@ -97,7 +97,7 @@ impl TrajectorySegment {
                 })
             );
             if out.len() != 12 + natoms { Err(anyhow!("Atoms missing from .gro file"))? }
-            println!("Extracted {natoms} atoms from .gro file to pack segment");
+            log::debug!("Extracted {natoms} atoms from .gro file to pack segment");
         }
         let mut nframes: u32 = 0;
         while let Ok(frame) = xtcfile.read_xtc(natoms) {
@@ -110,7 +110,7 @@ impl TrajectorySegment {
             nframes += 1;
         }
         out[4..8].copy_from_slice(&nframes.to_le_bytes());
-        println!("Wrote {nframes} frames to segment. Expected size: {}, actual size: {}",
+        log::debug!("Wrote {nframes} frames to segment. Expected size: {}, actual size: {}",
             12 + natoms + (nframes as usize * natoms * 12),
             out.len()
         );

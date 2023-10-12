@@ -69,6 +69,12 @@ pub struct WorkerPause {
     pub jobname: String,
 }
 
+#[derive(Debug, Clone, Message)]
+#[rtype(result="()")]
+pub struct WorkerIdle {
+    pub addr: Addr<WorkerWsSession>,
+}
+
 impl WorkerWsSession {
     pub fn new(job_server: Addr<JobServer>) -> Self {
         Self {
@@ -81,7 +87,7 @@ impl WorkerWsSession {
     fn heartbeat(&self, ctx: &mut ws::WebsocketContext<Self>) {
         ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
             if Instant::now().duration_since(act.heartbeat) > WORKER_TIMEOUT {
-                println!("Lost connection to worker");
+                log::info!("Lost connection to worker");
                 // act.job_server.do_send(WorkerDisconnect { id: act.id });
                 ctx.stop();
                 return;
@@ -123,13 +129,13 @@ impl Actor for WorkerWsSession {
                     => {
                     // Job still in progress on my worker and no pause data, so invalidate it
                     job.status = JobStatus::Waiting;
-                    // TODO: Notify server that new job may be available?
+                    // Notify server that new job may be available
                     self.job_server.do_send(AssignJobs {})
                 },
                 JobStatus::Stealing(data, addr) if *addr == ctx.address() => {
                     // Job was in the process of being stolen, so go back to waiting for worker
                     job.status = JobStatus::Steal(data.clone());
-                    // TODO: Notify server that new job may be available?
+                    // Notify server that new job may be available
                     self.job_server.do_send(AssignJobs {})
                 }
                 _ => (),
@@ -147,7 +153,7 @@ impl Handler<JobAssignment> for WorkerWsSession {
     fn handle(&mut self, msg: JobAssignment, ctx: &mut Self::Context) -> Self::Result {
         let job = msg.job;
         let mut job_lock = job.write().unwrap();
-        println!("Got job assignment: {job_lock:?}");
+        log::info!("Got job assignment: {job_lock:?}");
         match &job_lock.status {
             JobStatus::Waiting => {
                 job_lock.status = JobStatus::Running(ctx.address());
@@ -158,12 +164,12 @@ impl Handler<JobAssignment> for WorkerWsSession {
                             let mut old_job = old_job.write().unwrap();
                             match &old_job.status {
                                 JobStatus::Running(addr) if *addr == ctx.address() => {
-                                    eprintln!("Assigned new job, but already had a running job. \
+                                    log::warn!("Assigned new job, but already had a running job. \
                                         Marking as Paused and assuming pause data will come.");
                                     old_job.status = JobStatus::Paused(addr.clone());
                                 }
                                 JobStatus::Stealing(data, addr) if *addr == ctx.address() => {
-                                    eprintln!("Assigned new job, but already stealing a job. \
+                                    log::warn!("Assigned new job, but already stealing a job. \
                                         Marking as Steal to be picked up by another worker.");
                                     old_job.status = JobStatus::Steal(data.clone());
                                     self.job_server.do_send(AssignJobs {});
@@ -172,12 +178,12 @@ impl Handler<JobAssignment> for WorkerWsSession {
                             };
                         }
                         ctx.binary([JOB_HEADER, config.as_bytes()].concat());
-                        println!("Sent new job to worker");
+                        log::info!("Sent job to worker");
                         true
                     }
                     Err(e) => {
                         job_lock.status = JobStatus::Waiting;
-                        eprintln!("Something went wrong serializing job assignment {job_lock:?}: {e}");
+                        log::error!("Something went wrong serializing job assignment {job_lock:?}: {e}");
                         false
                     }
                 }
@@ -192,12 +198,12 @@ impl Handler<JobAssignment> for WorkerWsSession {
                             let mut old_job = old_job.write().unwrap();
                             match &old_job.status {
                                 JobStatus::Running(addr) if *addr == ctx.address() => {
-                                    eprintln!("Assigned job to steal, but already had a running job. \
+                                    log::warn!("Assigned job to steal, but already had a running job. \
                                         Marking as Paused and assuming pause data will come.");
                                     old_job.status = JobStatus::Paused(addr.clone());
                                 }
                                 JobStatus::Stealing(data, addr) if *addr == ctx.address() => {
-                                    eprintln!("Assigned job to steal, but already stealing a job. \
+                                    log::warn!("Assigned job to steal, but already stealing a job. \
                                         Marking as Steal to be picked up by another worker.");
                                     old_job.status = JobStatus::Steal(data.clone());
                                     self.job_server.do_send(AssignJobs {});
@@ -206,12 +212,12 @@ impl Handler<JobAssignment> for WorkerWsSession {
                             };
                         }
                         ctx.binary([STEAL_HEADER, config.as_bytes(), b"\0", data.data.as_ref()].concat());
-                        println!("Sent resume job to worker");
+                        log::info!("Sent resume job to worker");
                         true
                     }
                     Err(e) => {
                         job_lock.status = JobStatus::Steal(data);
-                        eprintln!("Something went wrong serializing job assignment {job_lock:?}: {e}");
+                        log::error!("Something went wrong serializing job assignment {job_lock:?}: {e}");
                         false
                     }
                 }
@@ -249,17 +255,17 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WorkerWsSession {
                 self.heartbeat = Instant::now();
             }
             ws::Message::Text(_) => {
-                println!("Unexpected text from worker");
+                log::warn!("Unexpected text from worker");
             }
             ws::Message::Binary(mut bytes) => {
                 if bytes.starts_with(PAUSE_HEADER) {
-                    println!("Worker session received pause data");
+                    log::info!("Worker session received pause data");
                     // Format is b"pause\0{jobname}\0{pause_data}"
                     let _ = bytes.split_to(PAUSE_HEADER.len());
                     let jobname = match split_nullterm_utf8_str(&mut bytes) {
                         Ok(jobname) => jobname,
                         Err(e) => {
-                            eprintln!("Error reading jobname from pause data: {e}");
+                            log::error!("Error reading jobname from pause data: {e}");
                             return;
                         }
                     };
@@ -267,7 +273,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WorkerWsSession {
                         {
                             let job = job.read().unwrap();
                             if job.config.name != jobname {
-                                println!("Received pause data for job with different name. Expected {jobname}, got {}", job.config.name);
+                                log::error!("Received pause data for job with different name. Expected {jobname}, got {}", job.config.name);
                                 return
                             }
                         }
@@ -280,7 +286,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WorkerWsSession {
                                     });
                                 }
                                 _ => {
-                                    eprintln!(
+                                    log::error!(
                                         "Job {} in unexpected state when trying to set up for stealing: {:?}",
                                         jobname, job.status);
                                 }
@@ -288,23 +294,25 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WorkerWsSession {
                         }
                         self.job = None;
                     } else {
-                        eprintln!("Got pause data, but don't have a job!");
+                        log::error!("Got pause data, but don't have a job!");
                     }
+                    // Finished with old job, so can start a new one
+                    self.job_server.do_send(WorkerIdle {addr: ctx.address()});
 
                 } else if bytes.starts_with(SEGMENT_HEADER) {
-                    println!("Worker session received segment data");
+                    log::info!("Worker session received segment data");
                     // Format is b"seg\0{jobname}\0{segment_id: u32 little endian}{rest_of_frame_data}"
                     let _ = bytes.split_to(SEGMENT_HEADER.len());
                     let jobname = match split_nullterm_utf8_str(&mut bytes) {
                         Ok(jobname) => jobname,
                         Err(e) => {
-                            eprintln!("Error reading jobname from segment data: {e}");
+                            log::error!("Error reading jobname from segment data: {e}");
                             return;
                         }
                     };
                     // 4 bytes for segment id
                     if bytes.len() < 4 {
-                        eprintln!("Malformed binary segment from worker");
+                        log::error!("Malformed binary segment from worker");
                         return
                     }
                     // Package back core data with header removed to be forwarded on to clients
@@ -312,27 +320,27 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WorkerWsSession {
                     let segment = TrajectorySegment::new(bytes);
                     if let Some(job) = &self.job {
                         if let AddSegmentResult::WrongJob(seg) = job_add_seg_and_notify(job, jobname, segment_id, segment) {
-                            println!("Received segment for different job. Forwarding on for processing.");
+                            log::warn!("Received segment for different job. Forwarding on for processing.");
                             self.job_server.do_send(seg);
                         }
                     } else {
-                        println!("Received segment, but not assigned a job. Forwarding on for processing.");
+                        log::warn!("Received segment, but not assigned a job. Forwarding on for processing.");
                         self.job_server.do_send(UnhandledTrajectorySegment{ jobname, segment_id, segment });
                     }
                 } else if bytes.starts_with(FAILED_HEADER) {
-                    println!("Worker session received fail message");
+                    log::warn!("Worker session received fail message");
                     let _ = bytes.split_to(FAILED_HEADER.len());
                     let jobname = match str::from_utf8(&bytes) {
                         Ok(jobname) => jobname,
                         Err(e) => {
-                            eprintln!("Error reading failed jobname: {e}");
+                            log::error!("Error reading failed jobname: {e}");
                             return
                         }
                     };
                     if self.job.as_ref().and_then(
                         |j| Some(j.read().unwrap().config.name == jobname)
                     ) != Some(true) {
-                        println!("Received cancel signal for a different job");
+                        log::warn!("Received failed signal for a different job");
                         return;
                     }
                     if let Some(job) = self.job.take() {
@@ -345,21 +353,38 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WorkerWsSession {
                         for client in clients {
                             client.do_send(JobFailed { jobname: jobname.to_owned(), });
                         }
-                        // TODO: add worker back to idle list
-                        self.job_server.do_send(AssignJobs {});
                     }
+                    // Get a new job, or add worker back to idle list
+                    self.job_server.do_send(WorkerIdle {addr: ctx.address()});
                 } else if bytes.starts_with(DONE_HEADER) {
-                    {
-                        // TODO: Mark job as done and
-                        // add worker to idle list
+                    let _ = bytes.split_to(DONE_HEADER.len());
+                    let jobname = match str::from_utf8(&bytes) {
+                        Ok(jobname) => jobname,
+                        Err(e) => {
+                            log::error!("Error reading finished jobname: {e}");
+                            return
+                        }
+                    };
+                    log::info!("Job {jobname} is finished.");
+                    // Mark job as done and add worker to idle list
+                    if let Some(job) = self.job.take() {
+                        let mut job_lock = job.write().unwrap();
+                        if job_lock.config.name == jobname {
+                            job_lock.status = JobStatus::Finished;
+                        } else {
+                            self.job = Some(job.clone());
+                            log::error!("Received done message for different job. This should never happen.");
+                        }
+                    } else {
+                        log::error!("Received done message, but don't have a job. This should never happen.");
                     }
-                    self.job_server.do_send(AssignJobs {});
+                    self.job_server.do_send(WorkerIdle {addr: ctx.address()});
                 } else if bytes.starts_with(RESUME_HEADER) {
                     let _ = bytes.split_to(RESUME_HEADER.len());
                     let jobname = match str::from_utf8(&bytes) {
                         Ok(jobname) => jobname,
                         Err(e) => {
-                            eprintln!("Error reading failed jobname: {e}");
+                            log::error!("Error reading failed jobname: {e}");
                             return
                         }
                     };
@@ -370,11 +395,11 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WorkerWsSession {
                                 job.status = JobStatus::Running(ctx.address());
                             }
                         } else {
-                            println!("Received resume message for different job!");
+                            log::error!("Received resume message for different job!");
                         }
                     }
                 } else {
-                    println!("Received unknown message!");
+                    log::error!("Received unknown message!");
                 }
             }
             ws::Message::Close(reason) => {

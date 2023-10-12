@@ -52,15 +52,15 @@ impl UserDB {
         while let Some(arg) = args.next() {
             if arg == "--users" || arg == "-u" {
                 let Some(fname) = args.next() else {
-                    eprintln!("WARNING: no file specified with --users flag. Users will not be loaded!");
+                    log::warn!("no file specified with --users flag. Users will not be loaded!");
                     return Default::default()
                 };
-                println!("Reading users from {fname}");
+                log::debug!("Reading users from {fname}");
 
                 let file = match fs::File::open(fname) {
                     Ok(fid) => fid,
                     Err(e) => {
-                        eprintln!("WARNING: error while opening users file! {e}");
+                        log::error!("Error while opening users file: {e}");
                         return Default::default();
                     }
                 };
@@ -69,7 +69,7 @@ impl UserDB {
                         return db;
                     }
                     Err(e) => {
-                        eprintln!("WARNING: error while reading users! {e}");
+                        log::error!("error while reading users: {e}");
                         return Default::default();
                     }
                 }
@@ -104,7 +104,7 @@ impl UserDB {
     pub fn create_user(&mut self, user: UserCredentials) {
         let hash = user.password_hash();
         if self.0.insert(user.username.clone(), hash).is_some() {
-            eprintln!("WARNING: User already exists! ({})", user.username);
+            log::warn!("User already exists! ({})", user.username);
         }
     }
 

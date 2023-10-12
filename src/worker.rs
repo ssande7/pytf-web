@@ -7,6 +7,7 @@ use pytf_web::worker_client::PytfServer;
 
 #[actix_rt::main]
 async fn main() -> anyhow::Result<()> {
+    env_logger::init();
 
     // Expect server address as first command line argument and worker key as second
     let mut args = std::env::args().skip(1);
@@ -22,7 +23,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Set up connection to server. Server must be available or this will fail.
     let pytf_server = PytfServer::connect(server_addr, key).await?;
-    println!("Sending test ping");
+    log::debug!("Sending test ping");
     pytf_server.do_send(WsMessage(ws::Message::Ping(Bytes::from_static(b""))));
 
     let _ = actix_rt::signal::ctrl_c().await?;

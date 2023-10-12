@@ -55,7 +55,7 @@ impl Actor for PytfRunner {
                         ].concat().into()
                     ))),
                 e => {
-                        eprintln!("Failed to pack pause data: {e:?}");
+                        log::error!("Failed to pack pause data: {e:?}");
                         self.send_failed();
                     }
             };
@@ -154,7 +154,7 @@ impl Handler<PytfStop> for PytfRunner {
         if msg.jobname.as_ref() == Some(&self.config.name) || msg.jobname.is_none() {
             ctx.stop(); // Pause data packed while stopping
         } else {
-            println!("Received stop signal for different job: {}", msg.jobname.unwrap());
+            log::warn!("Received stop signal for different job: {}", msg.jobname.unwrap());
         }
     }
 }
@@ -163,7 +163,7 @@ impl Handler<PytfCycle> for PytfRunner {
     type Result = ();
     fn handle(&mut self, _: PytfCycle, ctx: &mut Self::Context) -> Self::Result {
         if let Err(e) = self.pytf.cycle() {
-            eprintln!("Error while performing deposition cycle: {e}");
+            log::error!("Error while performing deposition cycle: {e}");
             self.send_failed();
             return
         }
@@ -177,17 +177,17 @@ impl Handler<PytfCycle> for PytfRunner {
                 run_id,
             )
         );
-        println!("Completed cycle {} successfully.", run_id);
+        log::info!("Completed cycle {} successfully.", run_id);
 
         if run_id as i32 >= self.pytf.final_run_id() {
-            println!("Completed final cycle. Exiting.");
+            log::info!("Completed final cycle. Exiting.");
             self.send_done();
         } else {
             // Send a cycle message to myself to start the next cycle
             // This allows a PytfStop signal to get through and stop the
             // next cycle from happening if necessary.
             ctx.address().do_send(PytfCycle {});
-            println!("Queing next cycle.");
+            log::debug!("Queing next cycle.");
         }
     }
 }

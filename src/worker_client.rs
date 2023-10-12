@@ -95,7 +95,7 @@ impl PytfServer {
     fn heartbeat(&self, ctx: &mut Context<Self>) {
         ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
             if Instant::now().duration_since(act.heartbeat) > SERVER_TIMEOUT {
-                println!("Lost connection to server");
+                log::info!("Lost connection to server");
                 ctx.stop();
                 return;
             }
@@ -181,7 +181,7 @@ impl Handler<WsMessage> for PytfServer {
     type Result = ();
     fn handle(&mut self, msg: WsMessage, _ctx: &mut Self::Context) -> Self::Result {
         if let Err(e) = self.socket_sink.write(msg.0) {
-            eprintln!("WARNING: Failed to send message: {e:?}")
+            log::warn!("Failed to send message: {e:?}")
         }
     }
 }
@@ -192,7 +192,7 @@ impl StreamHandler<Result<ws::Frame, awc::error::WsProtocolError>> for PytfServe
     fn handle(&mut self, msg: Result<ws::Frame, awc::error::WsProtocolError>, ctx: &mut Self::Context) {
         let msg = match msg {
             Err(e) => {
-                println!("Received erroneous message: {e}");
+                log::error!("Received erroneous message: {e}");
                 ctx.stop();
                 return;
             }
@@ -206,15 +206,15 @@ impl StreamHandler<Result<ws::Frame, awc::error::WsProtocolError>> for PytfServe
                     let config = match std::str::from_utf8(bytes.as_ref()) {
                         Ok(config) => config,
                         Err(e) => {
-                            eprintln!("Failed to deserialize config of new job: {e}");
+                            log::error!("Failed to deserialize config of new job: {e}");
                             return
                         }
                     };
-                    println!("Config string: {config}");
+                    log::debug!("Config string: {config}");
                     let config: PytfConfig = match serde_json::from_str(config) {
                         Ok(config) => config,
                         Err(e) => {
-                            eprintln!("Failed to deserialize config for new job: {e}");
+                            log::error!("Failed to deserialize config for new job: {e}");
                             return
                         }
                     };
@@ -225,7 +225,7 @@ impl StreamHandler<Result<ws::Frame, awc::error::WsProtocolError>> for PytfServe
                         },
                         Ok(None) => (),
                         Err(e) => {
-                            eprintln!("Failed to start new job {jobname}: {e}");
+                            log::error!("Failed to start new job {jobname}: {e}");
                             let _ = self.socket_sink.write(ws::Message::Binary(
                                 [FAILED_HEADER, jobname.as_bytes()].concat().into()));
                             return
@@ -236,13 +236,13 @@ impl StreamHandler<Result<ws::Frame, awc::error::WsProtocolError>> for PytfServe
                     let _ = bytes.split_to(PAUSE_HEADER.len());
                     let Ok(jobname) = std::str::from_utf8(bytes.as_ref())
                     else {
-                        eprintln!("Received invalid string for jobname to stop");
+                        log::error!("Received invalid string for jobname to stop");
                         return
                     };
                     if let Some(worker) = &self.worker {
                         worker.do_send(PytfStop { jobname: Some(jobname.to_owned()) });
                     } else {
-                        println!("Received stop signal for job \"{jobname}\", but no worker running");
+                        log::warn!("Received stop signal for job \"{jobname}\", but no worker running");
                         return
                     }
                 } else if bytes.starts_with(STEAL_HEADER) {
@@ -251,26 +251,26 @@ impl StreamHandler<Result<ws::Frame, awc::error::WsProtocolError>> for PytfServe
                     let config = match split_nullterm_utf8_str(&mut bytes) {
                         Ok(config) => config,
                         Err(e) => {
-                            eprintln!("Failed to read config information from job to resume: {e}");
+                            log::error!("Failed to read config information from job to resume: {e}");
                             return
                         }
                     };
                     let config: PytfConfig = match serde_json::from_str(&config) {
                         Ok(config) => config,
                         Err(e) => {
-                            eprintln!("Failed to deserialize config for job to resume: {e}");
+                            log::error!("Failed to deserialize config for job to resume: {e}");
                             return
                         }
                     };
                     let pause_data = match PytfPauseFiles::unpack(bytes.as_ref()) {
                         Ok(data) => data,
                         Err(e) => {
-                            eprintln!("Error decoding pause data: {e}");
+                            log::error!("Error decoding pause data: {e}");
                             return
                         }
                     };
                     if let Err(e) = pause_data.to_disk(&config.work_directory, &config.name) {
-                        eprintln!("Failed to write job data to disk: {e}");
+                        log::error!("Failed to write job data to disk: {e}");
                         let _ = self.socket_sink.write(ws::Message::Binary(
                             [FAILED_HEADER, config.name.as_bytes()].concat().into()));
                         return
@@ -284,14 +284,14 @@ impl StreamHandler<Result<ws::Frame, awc::error::WsProtocolError>> for PytfServe
                         },
                         Ok(None) => (),
                         Err(e) => {
-                            eprintln!("Failed to resume job {jobname}: {e}");
+                            log::error!("Failed to resume job {jobname}: {e}");
                             let _ = self.socket_sink.write(ws::Message::Binary(
                                 [FAILED_HEADER, jobname.as_bytes()].concat().into()));
                             return
                         }
                     }
                 } else {
-                    println!("Received unknown message.");
+                    log::warn!("Received unknown message.");
                 }
             },
             ws::Frame::Ping(ping) => {
@@ -309,13 +309,13 @@ impl Actor for PytfServer {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
-        println!("Starting heartbeat");
+        log::debug!("Starting heartbeat");
         self.heartbeat(ctx);
     }
 
     /// Connection to main server is shutting down
     fn stopping(&mut self, ctx: &mut Self::Context) -> Running {
-        println!("Shutting down connection to server");
+        log::info!("Shutting down connection to server");
         // Cancel the worker if it's running.
         // NOTE: This will lose any pause data since the packet won't be forwarded.
         if let Some(worker) = &self.worker {

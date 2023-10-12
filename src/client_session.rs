@@ -64,7 +64,7 @@ impl ClientWsSession {
     fn heartbeat(&self, ctx: &mut ws::WebsocketContext<Self>) {
         ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
             if Instant::now().duration_since(act.heartbeat) > CLIENT_TIMEOUT {
-                println!("Lost connection to client {}", act.id);
+                log::info!("Lost connection to client {}", act.id);
                 // act.job_server.do_send(ClientDisconnect { id: act.id.clone() });
                 ctx.stop();
                 return;
@@ -99,7 +99,7 @@ impl Actor for ClientWsSession {
     }
 
     fn stopping(&mut self, ctx: &mut Self::Context) -> Running {
-        println!("Sending disconnect signal for client {}", self.id);
+        log::debug!("Sending disconnect signal for client {}", self.id);
         if !self.force_disconnect {
             if let Some(job) = &self.job {
                 job.write().unwrap().remove_client(&ctx.address());
@@ -151,13 +151,13 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
             ws::Message::Text(text) => {
                 let text = text.trim();
                 if text == MSG_JOB_CANCEL {
-                    println!("Received cancel signal for client {}", self.id);
+                    log::info!("Received cancel signal for client {}", self.id);
                     if let Some(job) = self.job.take() {
                         job.write().unwrap().remove_client(&ctx.address());
                     }
-                    println!("Done processing cancel for client {}", self.id);
+                    log::debug!("Done processing cancel for client {}", self.id);
                 } else if let Ok(config) = serde_json::from_str::<PytfConfigMinimal>(&text) {
-                    println!("Received job config from client {}:\n{config:?}", self.id);
+                    log::info!("Received job config from client {}:\n{config:?}", self.id);
                     self.job_server.send(ClientReqJob {
                         config: config.into(),
                         client_id: self.id.clone(),
@@ -177,25 +177,25 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
                     })
                     .wait(ctx);
                 } else if let Ok(segment_id) = text.parse::<usize>() {
-                    println!("Received request for segment {segment_id} from client {}: {text}", self.id);
+                    log::debug!("Received request for segment {segment_id} from client {}: {text}", self.id);
                     // Client requesting data from frame with specified id
                     if let Some(job) = &self.job {
                         let job = job.read().unwrap();
                         if segment_id <= job.segments.len(){
                             if let Some(frame) = &job.segments[segment_id.saturating_sub(1)] {
-                                println!("Sending segment {segment_id} to client {}", self.id);
+                                log::debug!("Sending segment {segment_id} to client {}", self.id);
                                 ctx.binary(frame.data());
                             } else {
-                                println!("Client requested segment {segment_id} which is not available.");
+                                log::debug!("Client requested segment {segment_id} which is not available.");
                                 ctx.text(format!("no_seg{}", segment_id));
                             }
                         }
                     }
                 } else {
-                    println!("Received unknown message from client {}", self.id);
+                    log::warn!("Received unknown message from client {}", self.id);
                 }
             }
-            ws::Message::Binary(_) => println!("Unexpected binary from client {}", self.id),
+            ws::Message::Binary(_) => log::warn!("Unexpected binary from client {}", self.id),
             ws::Message::Close(reason) => {
                 ctx.close(reason);
                 ctx.stop();

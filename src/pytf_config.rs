@@ -49,7 +49,6 @@ pub struct PytfConfig {
     pub n_cycles: usize,
 
     /// Duration of each deposition step
-    // TODO: calculate this later based on deposition velocity? Or allow as user input?
     #[serde(serialize_with = "serialize_f32_1dec", default)]
     pub run_time: f32,
 
