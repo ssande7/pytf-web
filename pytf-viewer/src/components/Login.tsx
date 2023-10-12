@@ -66,7 +66,7 @@ const Login: React.FC<ILogin> = ({ setToken }) => {
               type="password"
               onChange={e => setPassword(e.target.value)}
             />
-            <button className="submit-button roughness" type="submit">Login</button>
+            <button className="submit-button roughness" type="submit">Sign in</button>
           </form>
           <div className="login-fail" style={{display: loginFailed ? 'flex' : 'none'}}>
             Incorrect username or password!
