@@ -22,7 +22,7 @@ $ curl https://ftp.gromacs.org/gromacs/gromacs-2023.2.tar.gz --output gromacs-20
 $ tar -xvf gromacs-2023.2.tar.gz
 $ cd gromacs-2023.2
 $ mkdir build && cd build
-$ cmake .. -DUSE_OWN_FFTW=ON
+$ cmake .. -DGMX_BUILD_OWN_FFTW=ON
 $ make -j$(nproc)
 $ sudo make install
 ```
