@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import './App.css';
-import Viewer from './components/Viewer';
+import Deposition from './components/Deposition';
 import Login from './components/Login';
 
 const App: React.FC = () => {
@@ -29,7 +29,7 @@ const App: React.FC = () => {
   if (!token) {
     return (<Login setToken={setToken} />);
   }
-  return (<Viewer token={token} setToken={setToken}/>);
+  return (<Deposition token={token} setToken={setToken}/>);
 }
 
 export default App;
