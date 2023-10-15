@@ -70,18 +70,20 @@
 
 .tab-container {
   flex-grow: 1;
-  display: flex;
-  flex-direction: row;
-  align-items: top;
+  display: grid;
+  grid-template-columns: 8.5em 1fr;
   border: none;
 }
 
 .tab-buttons {
   display: grid;
+  flex-grow: 0;
   grid-template-columns: 1fr;
   grid-auto-rows: min-content;
   row-gap: 1pt;
   padding-left: 5pt;
+  overflow-x: hidden;
+  overflow-y: scroll;
   background-color: #222;
   border-right-color: #444;
   border-right-style: solid;
@@ -159,7 +161,7 @@
 
 .MD-param-group {
   flex-grow: 1;
-  overflow-y: auto;
+  overflow-y: scroll;
   display: flex;
   flex-direction: column;
   align-items: stretch;
