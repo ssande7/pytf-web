@@ -259,7 +259,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WorkerWsSession {
             }
             ws::Message::Binary(mut bytes) => {
                 if bytes.starts_with(PAUSE_HEADER) {
-                    log::info!("Worker session received pause data");
+                    log::debug!("Worker session received pause data");
                     // Format is b"pause\0{jobname}\0{pause_data}"
                     let _ = bytes.split_to(PAUSE_HEADER.len());
                     let jobname = match split_nullterm_utf8_str(&mut bytes) {
@@ -300,7 +300,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WorkerWsSession {
                     self.job_server.do_send(WorkerIdle {addr: ctx.address()});
 
                 } else if bytes.starts_with(SEGMENT_HEADER) {
-                    log::info!("Worker session received segment data");
+                    log::debug!("Worker session received segment data");
                     // Format is b"seg\0{jobname}\0{segment_id: u32 little endian}{rest_of_frame_data}"
                     let _ = bytes.split_to(SEGMENT_HEADER.len());
                     let jobname = match split_nullterm_utf8_str(&mut bytes) {

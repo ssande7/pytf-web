@@ -68,14 +68,15 @@ interface IComposition {
   running: boolean,
   setRunning: React.Dispatch<React.SetStateAction<boolean>>,
   resetTrajectory: () => void,
+  submit_waiting: boolean,
+  setSubmitWaiting: React.Dispatch<React.SetStateAction<boolean>>,
 }
 
 const Composition: React.FC<IComposition>
-  = ({socket, socket_connected, running, setRunning, resetTrajectory}) =>
+  = ({socket, socket_connected, running, setRunning, resetTrajectory, submit_waiting, setSubmitWaiting}) =>
 {
   const [molecules, setMolecules] = useState<Array<MixtureComponentDetailed>>([]);
   const [config, setConfig] = useState<PytfConfig>({deposition_velocity: 0.35, mixture: []});
-  const [submit_waiting, setSubmitWaiting] = useState(false);
   const [protocol_visible, setProtocolVisible] = useState(true);
 
   // Get the list of available molecules on load
@@ -152,9 +153,10 @@ interface IVis {
   mean_height: number | null,
   new_roughness: boolean,
   setNewRoughness: React.Dispatch<React.SetStateAction<boolean>>,
+  status_text: string,
 }
 
-const Vis: React.FC<IVis> = ({particles, num_frames, height_map, show_height_map, num_bins, roughness, mean_height, new_roughness, setNewRoughness }) => {
+const Vis: React.FC<IVis> = ({particles, num_frames, height_map, show_height_map, num_bins, roughness, mean_height, new_roughness, setNewRoughness, status_text }) => {
   const [vis, setVis] = useState<Visualizer | null>(null);
   const [loadingVis, setLoadingVis] = useState(false);
   const domElement = useRef<HTMLDivElement | null>(null);
@@ -215,55 +217,9 @@ const Vis: React.FC<IVis> = ({particles, num_frames, height_map, show_height_map
   // Handle iteration between frames
   const animationSlider = useRef<HTMLInputElement | null>(null);
   const frameRef = useRef(frame);
-  const [animationTimer, setAnimationTimer] = useState<NodeJS.Timer | null>(null);
   const [fps, setFps] = useState(15)
+  const [seeking, setSeeking] = useState(false);
   const loopRef = useRef(loop);
-
-  useEffect(() => {
-    console.log("Triggered frame update");
-    frameRef.current = frame;
-    if (animationSlider.current) {
-      animationSlider.current.value = String(frame)
-    }
-  }, [frame])
-
-  function startAnimation() {
-    setAnimationTimer(setInterval(() => {
-      var new_frame = frameRef.current + 1;
-      if (loopRef.current) {
-        new_frame = particles.length > 0 ? new_frame % particles.length : 0;
-      } else if (new_frame >= particles.length) {
-        return
-      }
-      frameRef.current = new_frame
-      setFrame(new_frame)
-    }, 1000.0/fps))
-  }
-
-  function stopAnimation() {
-    if (animationTimer) {
-      clearInterval(animationTimer)
-      setAnimationTimer(null)
-    }
-  }
-
-  function restartAnimation() {
-    if (animationTimer) {
-      clearInterval(animationTimer)
-      startAnimation()
-    }
-  }
-
-  function toggleAnimation() {
-    if (paused) {
-      startAnimation()
-    } else {
-      stopAnimation()
-    }
-    setPaused(!paused)
-  }
-
-  useEffect(restartAnimation, [particles.length, fps])
 
   function resetCamera() {
     if (vis && camTargetInit && camPositionInit) {
@@ -278,11 +234,6 @@ const Vis: React.FC<IVis> = ({particles, num_frames, height_map, show_height_map
   useEffect(() => {
     loopRef.current = loop
   }, [loop]);
-
-  useEffect(() => {
-    if (!paused) startAnimation();
-  }, []);
-
 
   // Calculate tiles to display heat map
   const [height_map_disp, setHeightMapDisp] = useState<Array<Mesh>>([]);
@@ -349,7 +300,32 @@ const Vis: React.FC<IVis> = ({particles, num_frames, height_map, show_height_map
     }
   }, [new_roughness, setNewRoughness]);
 
-  return (
+  // Timer to update the frame
+  useEffect(() => {
+    if (!paused && !seeking && particles.length > 0) {
+      const timer = setInterval(() => {
+        let new_frame = frameRef.current + 1;
+        if (loopRef.current) {
+          new_frame = particles.length > 0 ? new_frame % particles.length : 0;
+        } else if (new_frame >= particles.length) {
+          new_frame = Math.max(particles.length - 1, 0);
+        }
+        frameRef.current = new_frame;
+        setFrame(new_frame);
+      }, 1000.0/fps);
+      return () => {clearInterval(timer)};
+    }
+  }, [particles, particles.length, frameRef, setFrame, loopRef, fps, paused, seeking])
+
+  // Update slider based on current frame
+  useEffect(() => {
+    frameRef.current = frame;
+    if (animationSlider.current) {
+      animationSlider.current.value = String(frame)
+    }
+  }, [frame])
+
+  return (<>
     <div className="MD-vis" >
       <div
         style={{
@@ -361,17 +337,17 @@ const Vis: React.FC<IVis> = ({particles, num_frames, height_map, show_height_map
       <div className="MD-vis-controls">
         <div className="icon-button">
           <button className={paused ? "play-button play" : "play-button pause"}
-            onClick={toggleAnimation}
+            onClick={() => setPaused(prev => !prev)}
           />
         </div>
         <input type="range" min="0" max={particles.length > 0 ? particles.length-1 : 0} defaultValue='0' ref={animationSlider}
           style={{flexGrow: 8, marginRight: '12pt'}}
           onInput={(e) => {
-            if (!paused) {stopAnimation()}
+            setSeeking(true);
             const new_frame = e.currentTarget.valueAsNumber
             frameRef.current = new_frame
             setFrame(new_frame)
-            if (!paused) {startAnimation()}
+            setSeeking(false);
           }}
         />
         <button className="icon-button"
@@ -409,7 +385,10 @@ const Vis: React.FC<IVis> = ({particles, num_frames, height_map, show_height_map
         </button>
       </div>
     </div>
-  );
+    <div style={{color: 'white'}}>
+      <b>Status: </b>{status_text}
+    </div>
+  </>);
 }
 
 interface IRoughness {
@@ -474,7 +453,7 @@ const Roughness: React.FC<IRoughness> = ({ particles, num_bins, setNumBins, roug
 
   return (<div className="MD-param-group">
     <div className="collapsible no-hover">
-      <b>Roughness</b>
+      <b>Settings</b>
     </div>
     <div className="collapsible-content">
       <div className="flex-row">
@@ -496,7 +475,12 @@ const Roughness: React.FC<IRoughness> = ({ particles, num_bins, setNumBins, roug
           <span className="slider"></span>
         </label>
       </div>
-      <div className="flex-row" style={{marginTop: '20pt'}}>
+    </div>
+    <div className="collapsible no-hover">
+      <b>Results</b>
+    </div>
+    <div className="collapsible-content">
+      <div className="flex-row">
         <div style={{marginRight: 'auto'}}>Mean film thickness:</div>
         <div>{mean_height !== null ? (mean_height - min_height).toFixed(3) + ' nm' : '???'}</div>
       </div>
@@ -519,6 +503,7 @@ interface IViewer {
 }
 const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
   const [running, setRunning] = useState(false);
+  const [failed, setFailed] = useState(false);
   const socket = useRef<WebSocket | null>(null);
   const [socket_connected, setSocketConnected] = useState(false);
   const [last_message, setLastMessage] = useState<MessageEvent<any> | null>(null);
@@ -528,7 +513,9 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
   const [particles, setParticles] = useState<Array<Particles>>([]);
   const [wait_for_segment, setWaitForSegment] = useState<boolean>(false);
   const [latest_segment, setLatestSegment] = useState<number>(0);
+  const [num_segments, setNumSegments] = useState<number>(0);
   const [sim_done, setSimDone] = useState<boolean>(false);
+  const [submit_waiting, setSubmitWaiting] = useState(false);
 
   const [particles_roughness, setParticlesRoughness] = useState<Particles | null>(null);
   const [roughness_ready, setRoughnessReady] = useState<boolean>(false);
@@ -645,14 +632,21 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
       console.log("Segment not available yet: ", seg);
       setWaitForSegment((waiting) => seg === next_segment ? false : waiting);
 
+    } else if (last_message.data.startsWith("num_seg")) {
+      setNumSegments(Number.parseInt(last_message.data.slice(7)));
+
+    } else if (last_message.data === "cancel") {
+      setRunning(false);
+
     } else if (last_message.data === "failed") {
-      // TODO: Show message about job failure
       console.log("Job failed!");
       setRunning(false);
+      setFailed(true);
       // setWaitForSegment(false);
     } else {
       console.log("Got unknown message: ", last_message.data);
     }
+    setSubmitWaiting(false);
   }, [last_message, setLastMessage,
       running, setRunning,
       wait_for_segment, setWaitForSegment,
@@ -662,6 +656,27 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
       particles, sim_done,
     ]);
 
+  let status_text;
+  if (submit_waiting) {
+    status_text = "Submitting"
+  } else if (failed) {
+    status_text = "Failed!"
+  } else if (running) {
+    if (num_segments > 0) {
+      if (latest_segment < num_segments) {
+        status_text = "Running step " + (latest_segment + 1) + " of " + num_segments;
+      } else {
+        status_text = "Complete (downloading trajectory)"
+      }
+    } else {
+      status_text = "In Queue"
+    }
+  } else if (roughness_ready) {
+    status_text = "Complete"
+  } else {
+    status_text = "Idle"
+  }
+
   const tabs = [
     {
       name: "Simulation",
@@ -670,15 +685,17 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
         <Composition
           socket={socket} socket_connected={socket_connected}
           running={running} setRunning={setRunning}
+          submit_waiting={submit_waiting} setSubmitWaiting={setSubmitWaiting}
           resetTrajectory={() => {
             console.log("Resetting trajectory");
+            particles.map((p) => p.dispose());
+            particles.length = 0;
             setSimDone(false);
+            setFailed(false);
             setNextSegment(1);
             setLatestSegment(0);
             setLastFrame(0);
             setWaitForSegment(false);
-            particles.map((p) => p.dispose());
-            particles.length = 0;
             setParticles(particles);
             setRoughness(null);
             setMeanHeight(null);
@@ -688,7 +705,7 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
         />
       },
       {
-        name: "Roughness",
+        name: "Analysis",
         enable: roughness_ready && particles_roughness,
         content:
           <Roughness
@@ -703,7 +720,40 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
     {
       name: "Help",
       enable: true,
-      content: "TODO"
+      content: <div className="MD-param-group">
+        <div className="collapsible-content">
+          <ol type="1">
+            <li>
+              <p>In the "Simulation" tab, add molecule types to the film composition.</p>
+            </li>
+            <li>
+              <p>Set the ratio of film components using the number boxes underneath each molecule type.</p>
+            </li>
+            <li>
+              <p>Set the deposition velocity. This controls how quickly the molecules are propelled towards the substrate, and how quickly the film builds up.</p>
+            </li>
+            <li>
+              <p>
+                Press the submit button to run the simulation.
+                As it runs, the atom trajectories will be streamed back and displayed.
+                Keep an eye on the status below the visualisation to see the simulation progress.
+              </p>
+            </li>
+            <li>
+              <p>
+                Once the simulation finishes, the "Analysis" tab will become available.
+                Click "Calculate Roughness" to build a height map of the film with the chosen number of bins and calculate the film thickness and roughness from it.
+              </p>
+              <p>
+                The roughness is calculated as the standard deviation of the bin height, and the thickness is calculated from the mean.
+              </p>
+              <p>
+                Try changing the number of bins used in the calculation. What do you notice?
+              </p>
+            </li>
+          </ol>
+        </div>
+      </div>
     },
   ];
 
@@ -754,6 +804,7 @@ const Viewer: React.FC<IViewer> = ({ token, setToken }) => {
               num_bins={num_bins} mean_height={mean_height}
               roughness={roughness} new_roughness={new_roughness}
               setNewRoughness={setNewRoughness}
+              status_text={status_text}
             />
           </div>
         </div>

@@ -28,9 +28,8 @@ const SubmitButton: React.FC<ISubmitButton> =
       console.log("Sending config")
       socket.current.send(JSON.stringify(config));
       resetTrajectory();
+      setRunning(true);
     }
-    setWaiting(false);
-    setRunning(!running);
   }
   return (<button
     className={"submit-button" + (running ? " cancel" : "")}

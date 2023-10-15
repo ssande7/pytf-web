@@ -2,7 +2,7 @@ use std::{time::{Duration, Instant}, sync::Arc};
 
 use actix::prelude::*;
 use actix_web_actors::ws;
-use pytf_web::pytf_config::PytfConfigMinimal;
+use pytf_web::pytf_config::{PytfConfigMinimal, PytfConfig};
 
 use crate::job_queue::{Job, JobServer, ClientConnect, ClientDisconnect, ClientReqJob, AssignJobs};
 
@@ -18,6 +18,10 @@ const CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
 * text("done") => Job has completed successfully.
 *
 * binary(b"{frame id: u32 little endian}{frame data}") => Frame of current job
+*
+* text("no_seg{parsable to usize}") => requested segment id (sent back) is unavailable
+*
+* text("num_seg{parsable to usize}") => number of segments to expect from the requested job
 *
 */
 
@@ -154,12 +158,15 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
                     log::info!("Received cancel signal for client {}", self.id);
                     if let Some(job) = self.job.take() {
                         job.write().unwrap().remove_client(&ctx.address());
+                        ctx.text(MSG_JOB_CANCEL); // Confirm the cancel
                     }
                     log::debug!("Done processing cancel for client {}", self.id);
                 } else if let Ok(config) = serde_json::from_str::<PytfConfigMinimal>(&text) {
                     log::info!("Received job config from client {}:\n{config:?}", self.id);
+                    let config: PytfConfig = config.into();
+                    ctx.text(format!("num_seg{}", config.n_cycles));
                     self.job_server.send(ClientReqJob {
-                        config: config.into(),
+                        config,
                         client_id: self.id.clone(),
                         client_addr: ctx.address(),
                         client_prev_job: self.job.clone(),

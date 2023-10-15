@@ -134,7 +134,7 @@ const MolList: React.FC<IMolList> =
           }
           {running ? "" :
             <button
-              onClick={() => setPickMol(true)}
+              onClick={() => {if (config.mixture.length > 0) setPickMol(true)}}
               className="molecule-tile add-molecule-button"
             >
               <AddIcon fontSize='large'/>

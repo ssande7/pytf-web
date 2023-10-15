@@ -429,15 +429,21 @@ input:checked + .slider:before {
 
 .collapsible-content {
   display: flex;
-  padding-top: 10pt;
-  padding-bottom: 10pt;
   flex-direction: column;
   align-items: stretch;
   justify-items: flex-start;
   padding: 10pt;
+  margin-bottom: 10pt;
   overflow-x: hidden;
   overflow-y: auto;
   background-color: #333;
+}
+
+.collapsible-content ol li {
+  font-weight: bold
+}
+.collapsible-content ol li p {
+  font-weight: normal;
 }
 
 .flex-row {

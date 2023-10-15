@@ -286,11 +286,18 @@ impl Handler<WorkerConnect> for JobServer {
     fn handle(&mut self, msg: WorkerConnect, ctx: &mut Self::Context) -> Self::Result {
         log::info!("New worker connected");
         self.worker_sessions.push(WorkerHandle::new(msg.addr.clone()));
+        if let Some(job) = self.unfinished_jobs.iter().filter(|job| is_job_runnable(job)).next() {
+            log::info!("Assigning job to new worker");
+            self.send_job_to_worker(
+                JobAssignment { job: job.clone(), },
+                self.worker_sessions.last().unwrap(),
+                ctx
+            );
+        }
         log::debug!("Currently have {} workers, {} of which are idle.",
             self.worker_sessions.len(),
             self.count_idle_workers()
         );
-        ctx.address().do_send(AssignJobs {});
     }
 }
 
@@ -386,7 +393,7 @@ impl JobInner {
         };
         self.clients.swap_remove(client_idx);
         if self.clients.is_empty() {
-            log::info!("Job with name {} is now empty.", self.config.name);
+            log::debug!("Job with name {} is now empty.", self.config.name);
             if let JobStatus::Running(worker) = &self.status {
                 worker.do_send(WorkerPause { jobname: self.config.name.clone() });
                 self.status = JobStatus::Paused(worker.clone());
@@ -410,7 +417,7 @@ impl JobInner {
         if self.segments[segment_id - 1].replace(segment).is_some() {
             log::warn!("Received duplicate of segment {segment_id} for trajectory {}", self.config.name);
         } else {
-            log::info!("Stored segment {segment_id} of {} for job {}", self.segments.len(), self.config.name);
+            log::debug!("Stored segment {segment_id} of {} for job {}", self.segments.len(), self.config.name);
         }
         if segment_id > self.latest_segment {
             self.latest_segment = segment_id;
@@ -429,7 +436,7 @@ impl JobInner {
     /// Ping clients interested in job about new trajectory frame
     pub fn notify_clients(&self) {
         let ping = self.build_ping();
-        log::info!("Sending ping: {ping:?}");
+        log::debug!("Sending ping: {ping:?}");
         for client in &self.clients {
             client.do_send(ping);
         }
