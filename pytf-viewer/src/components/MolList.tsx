@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { PytfConfig, MixtureComponentDetailed } from './types';
 import CloseIcon from '@mui/icons-material/Close';
 import AddIcon from '@mui/icons-material/Add';
-import RemoveIcon from '@mui/icons-material/Remove';
 import '../App.css';
 import CollapseIndicator from './CollapseIndicator';
+import TileSpinner from './TileSpinner';
 
 const RegSplitNums = RegExp('[0-9]+|[^0-9]+', 'g');
 const RegNum = RegExp('[0-9]+', 'g');
@@ -99,35 +99,13 @@ const MolList: React.FC<IMolList> =
                       {format_formula(molecules[i].formula, '8pt')}<br/>
                       {molecules[i].name}
                     </div>
-                    <div className="number-spin-container">
-                      <button className="icon-button inverted hover-blue"
-                        disabled={running}
-                        onClick={() => {
-                          if (config.mixture[i].ratio > 1)
-                            update_ratio(i, config.mixture[i].ratio-1)
-                        }}
-                      ><RemoveIcon/></button>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        style={{
-                          fontSize: '12pt',
-                          textAlign: 'center',
-                        }}
-                        min = {1} size = {4}
-                        disabled = {running}
-                        value = {config.mixture[i].ratio}
-                        onChange={(e) => {
-                          const val = e.target.value.replaceAll(RegExp('[^0-9]+', 'g'), '');
-                          const ratio = val ? parseInt(val) : 1;
-                          update_ratio(i, ratio > 0 ? ratio : 1);
-                        }}
-                      />
-                      <button className="icon-button inverted hover-blue"
-                        disabled={running}
-                        onClick={() => update_ratio(i, config.mixture[i].ratio+1)}
-                      ><AddIcon/></button>
-                    </div>
+                    <TileSpinner
+                      disabled={running}
+                      ratio={config.mixture[i].ratio}
+                      updateRatio={(ratio: number) => {
+                        update_ratio(i, ratio)
+                      }}
+                    />
                 </li>);
             })
             : null
