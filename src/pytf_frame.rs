@@ -30,7 +30,7 @@ pub struct TrajectorySegment {
 }
 
 pub struct AtomNameMap {
-    map: HashMap<String, u8>,
+    pub map: HashMap<String, u8>,
 }
 pub static ATOM_NAME_MAP: OnceLock<AtomNameMap> = OnceLock::new();
 impl AtomNameMap {

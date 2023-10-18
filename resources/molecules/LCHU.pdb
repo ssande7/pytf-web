@@ -1,0 +1,15 @@
+HEADER    UNCLASSIFIED                            18-Oct-23
+TITLE     ALL ATOM STRUCTURE FOR MOLECULE MC                                    
+AUTHOR    AUTOMATED TOPOLOGY BUILDER (ATB) REVISION 2023-06-14 20:38:16
+AUTHOR   2  https://atb.uq.edu.au
+HETATM    1  Cl3 LCHU    0       1.495  -0.190  -0.001  1.00  0.00          Cl
+HETATM    2   C1 LCHU    0       0.000   0.806  -0.000  1.00  0.00           C
+HETATM    3   H1 LCHU    0      -0.001   1.412   0.902  1.00  0.00           H
+HETATM    4   H2 LCHU    0       0.001   1.412  -0.902  1.00  0.00           H
+HETATM    5  Cl2 LCHU    0      -1.495  -0.190   0.001  1.00  0.00          Cl
+CONECT    1    2
+CONECT    2    1    3    4    5
+CONECT    3    2
+CONECT    4    2
+CONECT    5    2
+END

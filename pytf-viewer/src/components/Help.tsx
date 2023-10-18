@@ -34,7 +34,7 @@ export const Help: React.FC = () => {
           <p>
             Set a goal of building either the roughest or smoothest film you can.
             Try different compositions and deposition velocities to see how rough or smooth you can get.
-            Use 10 bins each time to keep things consistent, and make sure to record the details your experiments.
+            Use 10 bins each time to keep things consistent, and make sure to record the details of your experiments.
           </p>
         </li>
       </ol>

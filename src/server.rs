@@ -1,3 +1,5 @@
+use std::io::{Error, ErrorKind};
+
 use actix::{Addr, Actor};
 use actix_cors::Cors;
 use actix_files::{Files, NamedFile};
@@ -25,10 +27,15 @@ use pytf_web::{
 
 const FRONTEND_ROOT: &'static str = "./pytf-viewer/build";
 
-async fn index() -> impl Responder {
-    NamedFile::open_async(format!("{FRONTEND_ROOT}/index.html"))
-        .await
-        .expect("Could not find index.html! Make sure pytf-viewer has been built (npm run build)")
+async fn index(request: HttpRequest) -> impl Responder {
+    match NamedFile::open_async(format!("{FRONTEND_ROOT}/index.html")).await {
+        Ok(file) => file.respond_to(&request),
+        Err(e) => {
+            log::error!("Error fetching index.html: {e}");
+            log::warn!("Make sure pytf-viewer has been built (npm run build)");
+            HttpResponse::NotFound().finish()
+        }
+    }
 }
 
 #[post("/login")]
@@ -44,7 +51,10 @@ async fn login(request: HttpRequest, credentials: web::Json<UserCredentials>) ->
 
     match Identity::login(&request.extensions(), credentials.get_id()) {
         Ok(user) => {
-            let user_id = user.id().unwrap();
+            let Ok(user_id) = user.id() else {
+                log::error!("Failed to get id from user identity.");
+                return HttpResponse::InternalServerError().body("User session corrupted.")
+            };
             log::info!("Logged in ({user_id})");
             HttpResponse::Ok().json(LoginToken::from(user_id))
         }
@@ -54,15 +64,21 @@ async fn login(request: HttpRequest, credentials: web::Json<UserCredentials>) ->
 
 #[post("/logout")]
 async fn logout(user: Identity) -> impl Responder {
-    let user_id = user.id().unwrap();
+    let Ok(user_id) = user.id() else {
+        log::error!("Failed to get id from user identity.");
+        return HttpResponse::InternalServerError().body("User session corrupted.")
+    };
     log::info!("Logged out ({user_id})");
     user.logout();
-    HttpResponse::Ok()
+    HttpResponse::Ok().finish()
 }
 
 #[post("/user-token")]
 async fn user_token(user: Identity) -> impl Responder {
-    let user_id = user.id().unwrap();
+    let Ok(user_id) = user.id() else {
+        log::error!("Failed to get id from user identity.");
+        return HttpResponse::InternalServerError().body("User session corrupted.")
+    };
     log::info!("Sending cached token ({})", user_id);
     HttpResponse::Ok().json(LoginToken::from(user_id))
 }
@@ -74,7 +90,9 @@ async fn socket(
     stream: web::Payload,
     srv: web::Data<Addr<JobServer>>,
 ) -> Result<HttpResponse, actix_web::Error> {
-    let uid = user.id().unwrap();
+    let Ok(uid) = user.id() else {
+        return Err(Error::new(ErrorKind::InvalidData, "User session corrupted.").into())
+    };
     if uid == "worker" {
         ws::WsResponseBuilder::new(
             WorkerWsSession::new(srv.get_ref().clone()),

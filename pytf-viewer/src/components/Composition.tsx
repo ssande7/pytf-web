@@ -1,8 +1,9 @@
+import { Particles } from 'omovi';
 import React, { useEffect, useState } from 'react';
 import CollapseIndicator from './CollapseIndicator';
 import MolList from './MolList';
 import SubmitButton from './SubmitButton';
-import { MixtureComponentDetailed, PytfConfig } from './types';
+import { MixtureComponentDetailed, MixtureComponentWith3D, PytfConfig } from './types';
 
 interface IComposition {
   socket: React.MutableRefObject<WebSocket | null>,
@@ -17,9 +18,8 @@ interface IComposition {
 const Composition: React.FC<IComposition>
   = ({socket, socket_connected, running, setRunning, resetTrajectory, submit_waiting, setSubmitWaiting}) =>
 {
-  const [molecules, setMolecules] = useState<Array<MixtureComponentDetailed>>([]);
+  const [molecules, setMolecules] = useState<Array<MixtureComponentWith3D>>([]);
   const [config, setConfig] = useState<PytfConfig>({deposition_velocity: 0.35, mixture: []});
-  const [protocol_visible, setProtocolVisible] = useState(true);
 
   // Get the list of available molecules on load
   useEffect(() => {
@@ -27,8 +27,21 @@ const Composition: React.FC<IComposition>
     const fetchMolecules = async () => {
       const mols: {molecules: Array<MixtureComponentDetailed>} =
         await fetch("/molecules", abort).then(data => data.json());
-      console.log("Got molecules: " + JSON.stringify(mols))
-      setMolecules(mols.molecules)
+      // console.log("Got molecules: " + JSON.stringify(mols))
+      setMolecules(mols.molecules.map((mol) => {
+        const natoms = mol.atoms.length;
+        const particles = new Particles(natoms);
+        for (let i = 0; i < natoms; i++) {
+          particles.add(
+            mol.atoms[i].y / 10.,
+            mol.atoms[i].z / 10.,
+            mol.atoms[i].x / 10.,
+            mol.atoms[i].typ,
+            mol.atoms[i].typ
+          );
+        }
+        return {...mol, particles: particles};
+      }))
     };
     fetchMolecules();
     return () => abort.abort();
@@ -49,15 +62,10 @@ const Composition: React.FC<IComposition>
         molecules={molecules}
         config={config} setConfig={setConfig}
       />
-      <div className="collapsible"
-        onClick={() => setProtocolVisible((prev) => !prev)}
-      >
+      <div className="collapsible">
         <b>Protocol</b>
-        <CollapseIndicator visible={protocol_visible} />
       </div>
-      <div className="collapsible-content"
-        style={{ display: protocol_visible ? "flex" : "none" }}
-      >
+      <div className="collapsible-content">
           <div className="flex-row">
             <div style={{marginRight: 'auto'}}>Deposition velocity:</div>
             <div>{config.deposition_velocity} nm/ps</div>

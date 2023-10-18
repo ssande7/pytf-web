@@ -4,6 +4,7 @@ pub mod pytf_config;
 pub mod pytf_runner;
 pub mod pytf_frame;
 pub mod worker_client;
+pub mod pdb2xyz;
 
 use anyhow::anyhow;
 

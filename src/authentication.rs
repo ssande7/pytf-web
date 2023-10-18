@@ -109,12 +109,17 @@ impl UserDB {
     }
 
     pub fn validate_user(&self, user: &UserCredentials) -> bool {
-        let hash = if let Some(hash) = self.0.get(&user.username) {
-            hash
-        } else {
-            return false;
+        let Some(hash) = self.0.get(&user.username) else {
+            log::info!("Received login request for unknown user \"{}\"", user.username);
+            return false
         };
-        let parsed_hash = PasswordHash::new(&hash).unwrap();
+        let parsed_hash = match PasswordHash::new(&hash) {
+            Ok(h) => h,
+            Err(e) => {
+                log::warn!("Failed to hash password for user \"{}\": {e}", user.username);
+                return false
+            }
+        };
         Argon2::default()
             .verify_password(user.password.as_str().as_bytes(), &parsed_hash)
             .is_ok()

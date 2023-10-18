@@ -47,10 +47,10 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
     }
 
     socket.current = new WebSocket(ws_url + "socket");
-    console.log("Socket opened.");
+    // console.log("Socket opened.");
     socket.current.onopen = () => setSocketConnected(true);
     socket.current.onclose = () => {
-      console.log("socket closed");
+      // console.log("socket closed");
       setSocketConnected(false)
     };
     socket.current.onmessage = (e) => setLastMessage(e);
@@ -82,7 +82,7 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
         }
         const num_frames    = buffer.getUint32(4, true);
         const num_particles = buffer.getUint32(8, true);
-        console.log("Got new segment:\n\tid: ", segment_id, "\n\tframes: ", num_frames, "\n\tparticles: ", num_particles);
+        // console.log("Got new segment:\n\tid: ", segment_id, "\n\tframes: ", num_frames, "\n\tparticles: ", num_particles);
         const types = new Uint8Array(buffer.buffer, 12, num_particles);
         var offset = 12 + num_particles;
         for (let i = 0; i < num_frames; i++) {
@@ -101,17 +101,18 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
           offset += 12*num_particles;
           particles.push(frame);
         }
-        console.log("Particles now contains ", particles.length, " frames.");
+        // console.log("Particles now contains ", particles.length, " frames.");
         setLastFrame((last_frame) => last_frame + num_frames);
         setParticles(particles);
         setNextSegment(segment_id + 1);
         if (segment_id < latest_segment && socket.current) {
-          console.log("Done processing. Requesting next segment: ", segment_id + 1);
+          // console.log("Done processing. Requesting next segment: ", segment_id + 1);
+
           // Wait 0.25s before requesting more frames to avoid laggy rendering from
           // constant refreshes of `particles`
           setTimeout(() => {
             socket.current?.send((segment_id + 1).toString());
-            console.log("Requested segment ", segment_id+1);
+            // console.log("Requested segment ", segment_id+1);
           }, 250);
         } else {
           setWaitForSegment(false);
@@ -126,22 +127,24 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
 
     } else if (last_message.data.startsWith("new_frames") || last_message.data.startsWith("done")) {
       const done = last_message.data.startsWith("done");
-      console.log("Received trajectory ping: ", last_message.data);
+      // console.log("Received trajectory ping: ", last_message.data);
       const latest_segment = Number.parseInt(last_message.data.slice(done ? 4 : 10));
       if (done) { setSimDone(true); }
       setLatestSegment((prev) => latest_segment > prev ? latest_segment : prev);
       setWaitForSegment((waiting) => {
         if (!waiting && latest_segment >= next_segment && socket.current) {
-          console.log("Requesting segment ", next_segment);
+          // console.log("Requesting segment ", next_segment);
           socket.current.send(next_segment.toString());
           return true
-        } else { console.log("Already waiting, skipping request for ", next_segment) }
+        } else {
+          // console.log("Already waiting, skipping request for ", next_segment)
+        }
         return waiting
       })
 
     } else if (last_message.data.startsWith("no_seg")) {
       const seg = Number.parseInt(last_message.data.slice(6));
-      console.log("Segment not available yet: ", seg);
+      // console.log("Segment not available yet: ", seg);
       setWaitForSegment((waiting) => seg === next_segment ? false : waiting);
 
     } else if (last_message.data.startsWith("num_seg")) {
@@ -151,7 +154,7 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
       setRunning(false);
 
     } else if (last_message.data === "failed") {
-      console.log("Job failed!");
+      // console.log("Job failed!");
       setRunning(false);
       setFailed(true);
       // setWaitForSegment(false);
@@ -201,7 +204,7 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
           running={running} setRunning={setRunning}
           submit_waiting={submit_waiting} setSubmitWaiting={setSubmitWaiting}
           resetTrajectory={() => {
-            console.log("Resetting trajectory");
+            // console.log("Resetting trajectory");
             particles.map((p) => p.dispose());
             particles.length = 0;
             setSimDone(false);

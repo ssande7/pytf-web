@@ -1,11 +1,25 @@
 
 // Sent by server as list of available components
+
+import { Particles } from "omovi"
+
+export type Atom = {
+  x: number,
+  y: number,
+  z: number,
+  typ: number,
+}
+
 // TODO: include geometry for 3D display
 export type MixtureComponentDetailed = {
   res_name: string,
   name: string,
   formula: string,
-  natoms: number,
+  atoms: Array<Atom>,
+}
+
+export type MixtureComponentWith3D = MixtureComponentDetailed & {
+  particles: Particles,
 }
 
 // Minimal info to pack into config

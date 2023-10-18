@@ -23,6 +23,7 @@ const TileSpinner: React.FC<ITileSpinner> = ({disabled, ratio, updateRatio}) => 
         }}
       ><RemoveIcon/></button>
       <input
+        title="Molar Ratio"
         type="text"
         inputMode="numeric"
         style={{

@@ -1,18 +1,29 @@
-use std::{hash::{Hash, Hasher}, sync::OnceLock, env::Args};
+use std::{hash::{Hash, Hasher}, env::Args, sync::OnceLock};
 use num::integer::Integer;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+
+use crate::pdb2xyz::pdb2xyz;
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Atom {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub typ: u8,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MixtureComponentDetailed {
     res_name: String,
     name: String,
     formula: String,
-    natoms: usize,
+    atoms: Option<Vec<Atom>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MoleculeResources{
+pub struct MoleculeResources {
     molecules: Vec<MixtureComponentDetailed>
 }
 
@@ -26,15 +37,24 @@ impl MoleculeResources {
                 break;
             }
         }
-        serde_json::from_str(
+        let mut molecules: MoleculeResources = serde_json::from_str(
             &std::fs::read_to_string(&mols_file)
                 .expect(&format!("Failed to read molecules json file: {}", &mols_file))
-        ).expect("Failed to parse molecules json file")
+        ).expect("Failed to parse molecules json file");
+        for mol in molecules.molecules.iter_mut() {
+            mol.atoms = Some(
+                pdb2xyz(format!("resources/molecules/{}.pdb", mol.res_name))
+                    .expect(&format!("Failed to parse pdb file for {}", mol.res_name))
+            );
+        }
+        molecules
     }
 }
 
+// TODO: Make this configurable
 pub static AVAILABLE_MOLECULES: OnceLock<MoleculeResources> = OnceLock::new();
 pub const INSERTIONS_PER_RUN: usize = 4;
+pub const DEPOSITION_STEPS:   usize = 36;
 pub const TARGET_ATOMS_TOTAL: usize = 1300;
 pub const INSERT_DISTANCE:  f32 = 2f32;
 pub const RUN_TIME_MINIMUM: f32 = 18f32;
@@ -84,25 +104,25 @@ impl From<PytfConfigMinimal> for PytfConfig {
                 config.mixture.iter().map(|v| v.ratio).max().unwrap_or(1),
                 |acc, v| acc.gcd(&v.ratio)
             );
-        let mut ratio_tot = 0;
-        let mut atoms_per_step = 0;
+        // let mut ratio_tot = 0;
+        // let mut atoms_per_step = 0;
         for mol in config.mixture.iter_mut() {
             mol.fill_fields();
             mol.ratio /= gcd;
-            ratio_tot += mol.ratio;
-            let natoms = AVAILABLE_MOLECULES.get().unwrap()
-                .molecules
-                .iter().find_map(|m| {
-                    if m.res_name == mol.res_name {
-                        Some(m.natoms)
-                    } else { None }
-                }).unwrap_or(0);
-            atoms_per_step += mol.ratio * natoms;
+            // ratio_tot += mol.ratio;
+            // let natoms = AVAILABLE_MOLECULES.get().unwrap()
+            //     .molecules
+            //     .iter().find_map(|m| {
+            //         if m.res_name == mol.res_name {
+            //             Some(m.natoms)
+            //         } else { None }
+            //     }).unwrap_or(0);
+            // atoms_per_step += mol.ratio * natoms;
         }
-        let atoms_per_step = if ratio_tot > 0 {
-            (INSERTIONS_PER_RUN * atoms_per_step) as f32 / ratio_tot as f32
-        } else { 1f32 };
-        let n_cycles = (TARGET_ATOMS_TOTAL as f32 / atoms_per_step).ceil() as usize;
+        // let atoms_per_step = if ratio_tot > 0 {
+        //     (INSERTIONS_PER_RUN * atoms_per_step) as f32 / ratio_tot as f32
+        // } else { 1f32 };
+        let n_cycles = DEPOSITION_STEPS; //(TARGET_ATOMS_TOTAL as f32 / atoms_per_step).ceil() as usize;
         let run_time = (INSERT_DISTANCE / config.deposition_velocity) + RUN_TIME_MINIMUM;
         let mut name = String::with_capacity(config.mixture.len()*15+10);
         name.push_str(&format!("{:.1}_{:.2}", run_time, config.deposition_velocity));

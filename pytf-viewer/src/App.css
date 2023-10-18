@@ -71,7 +71,7 @@
 .tab-container {
   flex-grow: 1;
   display: grid;
-  grid-template-columns: 8.5em 1fr;
+  grid-template-columns: 9em 1fr;
   border: none;
 }
 
@@ -100,6 +100,7 @@
   cursor: pointer;
   border: none;
   border-radius: 0;
+  text-align: right;
   /* writing-mode: vertical-lr; */
   /* text-orientation: sideways; */
   /* transform: translate(14pt, 0) rotate(180deg); */
@@ -312,39 +313,64 @@ input:checked + .slider:before {
 }
 
 .molecule-tile {
-  background-color: '#eee';
-  color: 'white';
+  background: '#eee';
+  color: 'black';
+  height: 160pt;
   text-align: center;
   display: block;
-  border-style: none;
-  border-radius: 0;
+  /* border-style: none; */
+  /* border-radius: 0; */
 }
 
 .molecule-tile-clickable {
+  height: 130pt;
   cursor: pointer;
 }
 .molecule-tile-clickable:hover {
-  background-color: #ccc;
+  background: #ccc;
 }
 
-.add-molecule-button {
+.molecule-tile-add {
   color: white;
   background: transparent;
   border-style: solid;
   border-color: #eee;
   border-radius: 0;
   cursor: pointer;
+  height: 160pt;
+  text-align: center;
+  font-size: 24pt;
 }
 
 .molecule-tile-grid {
   padding: 10pt;
-  background-color: transparent;
   display: grid;
   gap: 10pt;
   grid-template-columns: repeat( auto-fill, minmax(130pt, 1fr));
-  grid-auto-rows: 150pt;
+  grid-auto-rows: 160pt;
   overflow-y: scroll;
-  min-height: 150pt;
+  min-height: 160pt;
+}
+
+.molecule-picker-content {
+  display: flex;
+  flex-direction: row;
+  max-height: 70vh;
+}
+
+.molecule-picker-imgfill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #eee;
+  width: 30vw;
+}
+
+.molecule-picker-3d {
+  background-color: #333;
+  width: 30vw;
+  height: 70vh;
 }
 
 .collapsible {
@@ -480,6 +506,7 @@ input:checked + .slider:before {
   bottom: 0;
   width: 100%;
   height: 100%;
+  z-index: 100;
 }
 
 .login-bg {

@@ -22,10 +22,10 @@ const SubmitButton: React.FC<ISubmitButton> =
 
     setWaiting(true);
     if (running) {
-      console.log("Sending cancel")
+      // console.log("Sending cancel")
       socket.current.send("cancel");
     } else {
-      console.log("Sending config")
+      // console.log("Sending config")
       socket.current.send(JSON.stringify(config));
       resetTrajectory();
       setRunning(true);
