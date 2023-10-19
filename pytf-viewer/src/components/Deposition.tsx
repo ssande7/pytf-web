@@ -158,7 +158,9 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
       setRunning(false);
       setFailed(true);
       // setWaitForSegment(false);
-    } else {
+    } else if (last_message.data !== "queued") {
+      // queued sent when job has been queued.
+      // No need to handle apart from unsetting submit_waiting below.
       console.log("Got unknown message: ", last_message.data);
     }
     setSubmitWaiting(false);

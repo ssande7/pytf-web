@@ -28,6 +28,7 @@ const CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
 const MSG_NEW_FRAMES: &str = "new_frames";
 const MSG_JOB_FAILED: &str = "failed";
 const MSG_JOB_DONE:   &str = "done";
+const MSG_JOB_QUEUED: &str = "queued";
 
 /** MESSAGES FROM CLIENT
 * text("cancel") => Cancel the current job
@@ -164,7 +165,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
                 } else if let Ok(config) = serde_json::from_str::<PytfConfigMinimal>(&text) {
                     log::info!("Received job config from client {}:\n{config:?}", self.id);
                     let config: PytfConfig = config.into();
-                    ctx.text(format!("num_seg{}", config.n_cycles));
+                    ctx.text(MSG_JOB_QUEUED);
                     self.job_server.send(ClientReqJob {
                         config,
                         client_id: self.id.clone(),
@@ -250,5 +251,19 @@ impl Handler<JobFailed> for ClientWsSession {
                 ctx.text(MSG_JOB_FAILED);
             }
         }
+    }
+}
+
+#[derive(Message)]
+#[rtype(result="()")]
+pub struct JobNumSeg {
+    pub n_cycles: usize,
+}
+
+impl Handler<JobNumSeg> for ClientWsSession {
+    type Result = ();
+    /// Notify client that job is running, and how many cycles (segments) to expect
+    fn handle(&mut self, msg: JobNumSeg, ctx: &mut Self::Context) -> Self::Result {
+        ctx.text(format!("num_seg{}", msg.n_cycles));
     }
 }

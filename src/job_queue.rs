@@ -6,7 +6,7 @@ use pytf_web::{
 };
 
 use crate::{
-    client_session::{ClientWsSession, ClientForceDisconnect, TrajectoryPing},
+    client_session::{ClientWsSession, ClientForceDisconnect, TrajectoryPing, JobNumSeg},
     worker_session::{WorkerWsSession, WorkerPause, WorkerIdle}
 };
 
@@ -123,12 +123,17 @@ impl JobServer {
 
     fn send_job_to_worker(&self, job: JobAssignment, worker: &WorkerHandle, ctx: &mut <Self as Actor>::Context) {
         let idle = worker.idle.clone();
+        let job_handle = job.job.clone();
         worker.addr.send(job)
             .into_actor(self)
             .then(move | res, _act, _ctx| {
                 match res {
                     Ok(true) => {
                         log::debug!("Sent new job to worker session");
+                        let job = job_handle.read().unwrap();
+                        for client in job.clients.iter() {
+                            client.do_send(JobNumSeg { n_cycles: job.config.n_cycles})
+                        }
                     }
                     Ok(false) => {
                         log::warn!("Worker failed to take job");
