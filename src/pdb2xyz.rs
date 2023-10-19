@@ -22,13 +22,11 @@ fn pdbstr2xyz(pdb: &str) -> anyhow::Result<Vec<Atom>> {
 
     for line in lines {
         if !line.starts_with("HETATM") { break }
-        log::debug!("Processing line (len {}):\n{line}", line.len());
         let x: f32 = line.get(30..38).ok_or(anyhow!("x coordinate not found"))?.trim().parse()?;
         let y: f32 = line.get(38..46).ok_or(anyhow!("y coordinate not found"))?.trim().parse()?;
         let z: f32 = line.get(46..54).ok_or(anyhow!("z coordinate not found"))?.trim().parse()?;
         let typ = line.get(76..78)
             .and_then(|s| {
-                log::debug!("Got atom type {s}");
                 name_map.map.get(
                     s.trim()
                      .to_ascii_uppercase()

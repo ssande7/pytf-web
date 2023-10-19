@@ -15,6 +15,7 @@ export type MixtureComponentDetailed = {
   res_name: string,
   name: string,
   formula: string,
+  smiles: string,
   atoms: Array<Atom>,
 }
 

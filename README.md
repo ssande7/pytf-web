@@ -4,6 +4,10 @@ An educational tool for thin film deposition molecular dynamics simulations.
 
 Simulations run in [GROMACS](www.gromacs.org) via [PyThinFilm](github.com/ATB-UQ/PyThinFilm).
 
+2D molecule structures rendered with [smilesDrawer](github.com/reymond-group/smilesDrawer).
+
+3D structures rendered with [Omovi](github.com/andeplane/omovi).
+
 ## Installation
 
 1. Install the rust compiler toolchain via [rustup](https://www.rust-lang.org/tools/install)

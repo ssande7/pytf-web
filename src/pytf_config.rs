@@ -19,6 +19,7 @@ pub struct MixtureComponentDetailed {
     res_name: String,
     name: String,
     formula: String,
+    smiles: String,
     atoms: Option<Vec<Atom>>,
 }
 

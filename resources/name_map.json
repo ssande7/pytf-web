@@ -3,52 +3,62 @@
     {
       "res_name": "_J0B",
       "name": "Chloroform",
-      "formula": "CHCl3"
+      "formula": "CHCl3",
+      "smiles": "ClC(Cl)Cl"
     },
     {
       "res_name": "_U1M",
       "name": "Methane",
-      "formula": "CH4"
+      "formula": "CH4",
+      "smiles": "C"
     },
     {
       "res_name": "LCHU",
       "name": "Dichloromethane",
-      "formula": "CH2Cl2"
+      "formula": "CH2Cl2",
+      "smiles": "ClCCl"
     },
     {
       "res_name": "UZ3N",
       "name": "Acetonitrile",
-      "formula": "CH3CN"
+      "formula": "CH3CN",
+      "smiles": "CC#N"
     },
     {
       "res_name": "M304",
       "name": "Dimethyl Sulfoxide",
-      "formula": "(CH3)2SO"
+      "formula": "(CH3)2SO",
+      "smiles": "CS(C)=O"
     },
     {
       "res_name": "ZN3Y",
       "name": "Dimethylformamide",
-      "formula": "(CH3)2NCOH"
+      "formula": "(CH3)2NCOH",
+      "smiles": "CN(C)C=O"
     },
     {
       "res_name": "YUVT",
       "name": "Benzene",
-      "formula": "C6H6"
+      "formula": "C6H6",
+      "smiles": "C1=CC=CC=C1"
     },
     {
       "res_name": "G214",
       "name": "Pyridine",
-      "formula": "C5H5N"
+      "formula": "C5H5N",
+      "smiles": "C1C=CC=CN=1"
     },
     {
       "res_name": "G111",
       "name": "Phenol",
-      "formula": "C6H5OH"
+      "formula": "C6H5OH",
+      "smiles": "C1=CC=CC=C1O"
     },
     {
       "res_name": "G211",
       "name": "Aniline",
-      "formula": "C6H5NH2"
+      "formula": "C6H5NH2",
+      "smiles": "C1=CC=CC=C1N"
     }
   ]
 }

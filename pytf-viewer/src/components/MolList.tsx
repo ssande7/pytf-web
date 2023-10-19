@@ -8,11 +8,12 @@ import TileSpinner from './TileSpinner';
 import { Particles, Visualizer } from 'omovi';
 import { Vector3, Color } from 'three';
 import { atom_types } from './Visualiser';
+import SmilesImg from './SmilesImg';
 
 const RegSplitNums = RegExp('[0-9]+|[^0-9]+', 'g');
 const RegNum = RegExp('[0-9]+', 'g');
 
-const format_formula = (formula: string, sub_sz = '6pt') => {
+const format_formula = (formula: string, sub_sz = '8pt') => {
   return (<>
     {formula.match(RegSplitNums)?.map((str) =>
       RegNum.test(str) ? <sub style={{fontSize: sub_sz}}>{str}</sub> : str
@@ -84,24 +85,18 @@ const MolList: React.FC<IMolList> =
                         marginLeft: 'auto', marginRight: 'auto',
                         marginTop: 'auto', marginBottom: 'auto',
                         width: '90pt', height: '90pt',
-                        cursor: 'pointer', padding: '3pt',
+                        cursor: 'pointer',
                       }}
                       onClick={() => {
                         setShowMolecule2d(molecules[i]);
                       }}
                     >
-                      <div style={{height: '100%', display: 'inline-block', verticalAlign: 'middle'}}/>
-                      <img
-                        style={{
-                          maxWidth: '80pt', maxHeight: '100%',
-                          verticalAlign: 'middle',
-                        }}
-                        width="auto" height="auto"
-                        src={"molecules/" + molecules[i].formula + ".png"}
+                      <SmilesImg smiles={molecules[i].smiles}
+                        options={{width: '100%', height: '100%'}}
                       />
                     </div>
                     <div>
-                      {format_formula(molecules[i].formula, '8pt')}<br/>
+                      {format_formula(molecules[i].formula)}<br/>
                       {molecules[i].name}
                     </div>
                     <TileSpinner
@@ -174,13 +169,8 @@ const MolList: React.FC<IMolList> =
                         display: 'inline-block',
                         verticalAlign: 'middle'
                       }}/>
-                      <img
-                        style={{
-                          maxWidth: '100%', maxHeight: '100%',
-                          verticalAlign: 'middle',
-                        }}
-                        width="auto" height="auto"
-                        src={"molecules/" + molecules[i].formula + ".png"}
+                      <SmilesImg smiles={molecules[i].smiles}
+                        options={{width: '100%', height: '100%'}}
                       />
                     </div>
                     <div>
@@ -274,13 +264,9 @@ const MoleculeView: React.FC<IMoleculeView> = ({mol, close_fn}) => {
         </div>
         <div className="molecule-picker-content">
           <div className="molecule-picker-imgfill">
-            <img style={{ background: '#eee' }}
-              width='auto' height='auto'
-              src={mol ?
-                "molecules/" + mol.formula + '.png'
-                : ""
-              }
-            />
+              <SmilesImg smiles={mol ? mol.smiles : ""}
+                options={{width: '100%', height: '100%'}}
+              />
           </div>
           <div
             className="molecule-picker-3d"
