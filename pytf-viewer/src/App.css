@@ -315,7 +315,7 @@ input:checked + .slider:before {
 .molecule-tile {
   background: '#eee';
   color: 'black';
-  height: 160pt;
+  height: 150pt;
   text-align: center;
   display: block;
   /* border-style: none; */
@@ -337,7 +337,7 @@ input:checked + .slider:before {
   border-color: #eee;
   border-radius: 0;
   cursor: pointer;
-  height: 160pt;
+  height: 150pt;
   text-align: center;
   font-size: 24pt;
 }
@@ -347,9 +347,9 @@ input:checked + .slider:before {
   display: grid;
   gap: 10pt;
   grid-template-columns: repeat( auto-fill, minmax(130pt, 1fr));
-  grid-auto-rows: 160pt;
+  grid-auto-rows: 150pt;
   overflow-y: scroll;
-  min-height: 160pt;
+  min-height: 150pt;
 }
 
 .molecule-picker-content {
