@@ -23,7 +23,7 @@ const SmilesImg: React.FC<ISmilesImg> = ({ smiles, options }) => {
   }, [smiles]);
 
   return (
-    <svg id="smiles-canvas" ref={canvas_ref} style={{display: 'inline-block', verticalAlign: 'middle'}}/>
+    <svg id="smiles-canvas" ref={canvas_ref}/>
   );
 }
 

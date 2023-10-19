@@ -162,13 +162,8 @@ const MolList: React.FC<IMolList> =
                     <div style={{
                       marginLeft: 'auto', marginRight: 'auto',
                       marginTop: 'auto', marginBottom: 'auto',
-                      width: '80pt', height: '90pt', padding: '3pt',
+                      width: '80pt', height: '90pt',
                     }}>
-                      <div style={{
-                        height: '100%',
-                        display: 'inline-block',
-                        verticalAlign: 'middle'
-                      }}/>
                       <SmilesImg smiles={molecules[i].smiles}
                         options={{width: '100%', height: '100%'}}
                       />
