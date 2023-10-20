@@ -10,7 +10,7 @@ use futures::stream::{SplitSink, SplitStream};
 use crate::{
     authentication::UserCredentials,
     pytf_runner::{ PytfRunner, PytfStop, PytfPauseFiles, PytfCycle },
-    pytf_frame::{SegmentProcessor, WS_FRAME_SIZE_LIMIT},
+    pytf_frame::{SegmentProcessor, NewSocket, WS_FRAME_SIZE_LIMIT},
     pytf_config::PytfConfig,
     split_nullterm_utf8_str,
 };
@@ -18,6 +18,7 @@ use crate::{
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
 
 const SERVER_TIMEOUT: Duration = Duration::from_secs(90);
+const RECONNECT_TIMER: Duration = Duration::from_secs(60);
 
 
 /// To worker
@@ -37,51 +38,80 @@ type WsFramedSink = SplitSink<Framed<BoxedSocket, ws::Codec>, ws::Message>;
 type WsFramedStream = SplitStream<Framed<BoxedSocket, ws::Codec>>;
 
 pub struct PytfServer {
+    server_addr: String,
+    key: String,
     socket_sink: SinkWrite<ws::Message, WsFramedSink>,
     heartbeat: Instant,
     worker: Option<Addr<PytfRunner>>,
     segment_proc: Addr<SegmentProcessor>,
 }
 
-impl PytfServer {
-    /// Initialise a web socket client. Panics if the client
-    /// fails to initialise, or the server cannot return a test ping.
-    pub async fn connect<S: AsRef<str>>(server_addr: S, key: S) -> anyhow::Result<Addr<Self>> {
-        // Log in to server to allow web socket connection
-        let login = match awc::Client::new()
-            .post(format!("http://{}/login", server_addr.as_ref()))
-            .send_json(&UserCredentials {
-                username: "worker".into(),
-                password: key.as_ref().to_owned()
-            }).await
+async fn open_ws_connection(server_addr: String, key: String) -> anyhow::Result<(WsFramedSink, WsFramedStream)> {
+    // Log in to server to allow web socket connection
+    let login = match awc::Client::new()
+        .post(format!("http://{}/login", server_addr))
+        .send_json(&UserCredentials {
+            username: "worker".into(),
+            password: key.clone(),
+        }).await
         {
             Ok(login) => login,
             Err(e) => return Err(anyhow!("{e}")),
         };
 
-        // Get ID cookie
-        let Some(login_id) = login.cookie("id") else {
-            return Err(anyhow!("Login failed: Didn't receive id cookie."))
-        };
+    // Get ID cookie
+    let Some(login_id) = login.cookie("id") else {
+        return Err(anyhow!("Login failed: Didn't receive id cookie."))
+    };
 
 
-        // Connect to web socket
-        let socket = match awc::Client::new()
-            .ws(format!("ws://{}/socket", server_addr.as_ref()))
-            .cookie(login_id)
-            .max_frame_size(WS_FRAME_SIZE_LIMIT)
-            .connect()
-            .await
+    // Connect to web socket
+    let socket = match awc::Client::new()
+        .ws(format!("ws://{}/socket", server_addr))
+        .cookie(login_id)
+        .max_frame_size(WS_FRAME_SIZE_LIMIT)
+        .connect()
+        .await
         {
             Ok((_, socket)) => socket,
             Err(e) => return Err(anyhow!("Error connecting to web socket: {e}")),
         };
+    Ok(socket.split())
+}
 
-        let (sink, stream): (WsFramedSink, WsFramedStream) = socket.split();
-        Ok(Self::create(|ctx| {
+#[async_recursion::async_recursion(?Send)]
+async fn delay_and_reconnect(server_addr: String, key: String) -> (WsFramedSink, WsFramedStream) {
+    log::debug!("Waiting to try reconnection");
+    actix_rt::time::sleep(RECONNECT_TIMER).await;
+    match open_ws_connection(server_addr.clone(), key.clone()).await {
+        Ok(connection) => {
+            log::info!("Reconnected.");
+            connection
+        }
+        _ => {
+            log::warn!("Failed to reconnect! Trying again in {}s...", RECONNECT_TIMER.as_secs());
+            delay_and_reconnect(server_addr, key).await
+        }
+    }
+}
+
+
+impl PytfServer {
+    /// Initialise a web socket client. Waits and attempts reconnection
+    /// if client initialisation fails or the server can't return a test ping.
+    pub async fn connect(server_addr: String, key: String) -> Addr<Self> {
+        let (sink, stream) = match open_ws_connection(server_addr.clone(), key.clone()).await {
+            Ok(connection) => connection,
+            Err(e) => {
+                log::warn!("Error while connecting to server: {e}");
+                delay_and_reconnect(server_addr.clone(), key.clone()).await
+            }
+        };
+        Self::create(|ctx| {
             ctx.add_stream(stream);
             let addr = ctx.address();
             Self {
+                server_addr, key,
                 socket_sink: SinkWrite::new(sink, ctx),
                 heartbeat: Instant::now(),
                 worker: None,
@@ -89,14 +119,23 @@ impl PytfServer {
                     SegmentProcessor::new(addr).start()
                 }).expect("Failed to spawn segment processor thread"),
             }
-        }))
+        })
     }
 
     fn heartbeat(&self, ctx: &mut Context<Self>) {
-        ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
+        ctx.run_interval(HEARTBEAT_INTERVAL, move |act, ctx| {
             if Instant::now().duration_since(act.heartbeat) > SERVER_TIMEOUT {
-                log::info!("Lost connection to server");
-                ctx.stop();
+                log::warn!("Lost connection to server. Attempting to reconnect...");
+                act.socket_sink.close();
+                delay_and_reconnect(act.server_addr.clone(), act.key.clone())
+                    .into_actor(act)
+                    .then(|(sink, socket), act, ctx| {
+                        act.socket_sink = SinkWrite::new(sink, ctx);
+                        ctx.add_stream(socket);
+                        ctx.address().do_send(WsMessage(ws::Message::Ping("".into())));
+                        fut::ready(())
+                    })
+                    .wait(ctx);
                 return;
             }
             ctx.address().do_send(WsMessage(ws::Message::Ping("".into())));
@@ -105,8 +144,8 @@ impl PytfServer {
 
     /// Create a new `PytfRunner` worker in a new thread and tell it to begin cycling.
     /// Returns the previous worker if there was one and if the worker started successfully.
-    fn start_worker(&mut self, config: PytfConfig, addr: Addr<Self>) -> anyhow::Result<Option<Addr<PytfRunner>>> {
-        let runner = PytfRunner::new(config, addr, self.segment_proc.clone())?;
+    fn start_worker(&mut self, config: PytfConfig, addr: Addr<Self>, resuming: bool) -> anyhow::Result<Option<Addr<PytfRunner>>> {
+        let runner = PytfRunner::new(config, addr, self.segment_proc.clone(), resuming)?;
         if let Some(worker) = spawn_on_arbiter(async move {
             let worker = runner.start();
             worker.do_send(PytfCycle {});
@@ -181,7 +220,15 @@ impl Handler<WsMessage> for PytfServer {
     type Result = ();
     fn handle(&mut self, msg: WsMessage, _ctx: &mut Self::Context) -> Self::Result {
         if let Err(e) = self.socket_sink.write(msg.0) {
-            log::warn!("Failed to send message: {e:?}")
+            let display = format!("{e:?}");
+            if display.len() > 10000 {
+                log::warn!("Failed to send message: {}\n...\n{}",
+                    display.chars().take(300).collect::<String>(),
+                    display.chars().skip(display.chars().count() - 200).collect::<String>()
+                );
+            } else {
+                log::warn!("Failed to send message: {e:?}")
+            }
         }
     }
 }
@@ -219,7 +266,7 @@ impl StreamHandler<Result<ws::Frame, awc::error::WsProtocolError>> for PytfServe
                         }
                     };
                     let jobname = config.name.clone();
-                    match self.start_worker(config, ctx.address()) {
+                    match self.start_worker(config, ctx.address(), false) {
                         Ok(Some(old_worker)) => {
                             old_worker.do_send(PytfStop { jobname: None })
                         },
@@ -276,7 +323,7 @@ impl StreamHandler<Result<ws::Frame, awc::error::WsProtocolError>> for PytfServe
                         return
                     };
                     let jobname = config.name.clone();
-                    match self.start_worker(config, ctx.address()) {
+                    match self.start_worker(config, ctx.address(), true) {
                         Ok(Some(old_worker)) => {
                             old_worker.do_send(PytfStop { jobname: None });
                             let _ = self.socket_sink.write(ws::Message::Binary(
@@ -315,15 +362,40 @@ impl Actor for PytfServer {
 
     /// Connection to main server is shutting down
     fn stopping(&mut self, ctx: &mut Self::Context) -> Running {
-        log::info!("Shutting down connection to server");
-        // Cancel the worker if it's running.
-        // NOTE: This will lose any pause data since the packet won't be forwarded.
-        if let Some(worker) = &self.worker {
-            worker.send(PytfStop { jobname: None })
+        if !self.socket_sink.closed() {
+            log::debug!("Setting up reconnection");
+            self.socket_sink.close();
+            delay_and_reconnect(self.server_addr.clone(), self.key.clone())
                 .into_actor(self)
-                .then(|_, _, _| {fut::ready(())})
+                .then(move |(sink, stream), act, _ctx| {
+                    log::debug!("Creating new socket.");
+                    // TODO: make worker and segment_proc retry sending
+                    // failed messages somehow?
+                    // Maybe shouldn't preserve saved messages if server is a new instance?
+                    let worker = act.worker.take();
+                    let addr = Self::create(|ctx| {
+                            ctx.add_stream(stream);
+                            Self {
+                                server_addr: act.server_addr.clone(),
+                                key: act.key.clone(),
+                                socket_sink: SinkWrite::new(sink, ctx),
+                                heartbeat: Instant::now(),
+                                worker: worker.clone(),
+                                segment_proc: act.segment_proc.clone(),
+                            }
+                        });
+                    if let Some(worker) = &worker {
+                        worker.do_send(PytfStop { jobname: None });
+                    }
+                    act.segment_proc.do_send(NewSocket { addr });
+
+                    fut::ready(())
+                })
                 .wait(ctx);
+            return Running::Continue;
         }
+
+        log::info!("Shutting down connection to server");
         Running::Stop
     }
 }

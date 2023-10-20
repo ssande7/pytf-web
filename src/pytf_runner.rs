@@ -11,7 +11,7 @@ use crate::{
         PytfServer, WsMessage,
         PAUSE_HEADER, FAILED_HEADER, DONE_HEADER
     },
-    pytf_frame::{SegmentProcessor, SegToProcess}
+    pytf_frame::{SegmentProcessor, SegToProcess, NewSocket}
 };
 
 /// Actor to handle running a single deposition simulation.
@@ -129,18 +129,26 @@ impl PytfPauseFiles {
 
     /// Write pause files to disk ready to be resumed from
     pub fn to_disk(&self, workdir: impl AsRef<str>, jobname: impl AsRef<str>) -> std::io::Result<()> {
-        std::fs::create_dir_all(format!("{}/{}", workdir.as_ref(), PytfFile::Log))?;
-        std::fs::create_dir_all(format!("{}/{}", workdir.as_ref(), PytfFile::FinalCoords))?;
-        std::fs::create_dir_all(format!("{}/{}", workdir.as_ref(), PytfFile::InputCoords))?;
+        let workdir = workdir.as_ref();
+        let jobname = jobname.as_ref();
+        let wd_path = std::path::Path::new(workdir);
+        if wd_path.is_dir() {
+            if let Err(e) = std::fs::remove_dir_all(&wd_path) {
+                log::warn!("Failed to remove old working directory {}: {e}", workdir);
+            }
+        }
+        std::fs::create_dir_all(format!("{}/{}", workdir, PytfFile::Log))?;
+        std::fs::create_dir_all(format!("{}/{}", workdir, PytfFile::FinalCoords))?;
+        std::fs::create_dir_all(format!("{}/{}", workdir, PytfFile::InputCoords))?;
         File::options().write(true).create(true)
-            .open(PytfFile::Log.path(&workdir, &jobname, self.segment_id))?
+            .open(PytfFile::Log.path(workdir, jobname, self.segment_id))?
             .write(&self.log.as_bytes())?;
         File::options().write(true).create(true)
-            .open(PytfFile::FinalCoords.path(&workdir, &jobname, self.segment_id))?
+            .open(PytfFile::FinalCoords.path(workdir, jobname, self.segment_id))?
             .write(&self.coords.as_bytes())?;
         // Input coordinates file of this run just needs to exist
         File::options().append(true).create(true)
-            .open(PytfFile::InputCoords.path(&workdir, &jobname, self.segment_id))?
+            .open(PytfFile::InputCoords.path(workdir, jobname, self.segment_id))?
             .write(b"")?;
         Ok(())
     }
@@ -194,13 +202,24 @@ impl Handler<PytfCycle> for PytfRunner {
 
 impl PytfRunner {
     /// Set up an actor with a `Pytf` python instance ready to run a simulation
-    pub fn new(config: PytfConfig, socket: Addr<PytfServer>, segment_proc: Addr<SegmentProcessor>) -> anyhow::Result<Self> {
+    pub fn new(
+        config: PytfConfig,
+        socket: Addr<PytfServer>,
+        segment_proc: Addr<SegmentProcessor>,
+        resuming: bool
+    ) -> anyhow::Result<Self> {
         // Get yaml string to append to config
         let yml = serde_yaml::to_string(&config)?;
 
         // Create working directory if it doesn't already exist
+        // Skip if resuming, since unpacking pause data will create it
         let mut config_yml = PathBuf::from(&config.work_directory);
-        if !config_yml.is_dir() {
+        if !resuming {
+            if config_yml.is_dir() {
+                if let Err(e) = std::fs::remove_dir_all(&config_yml) {
+                    log::warn!("Failed to remove old working directory {}: {e}", config.work_directory);
+                }
+            }
             std::fs::create_dir(&config_yml)?;
         }
 
@@ -239,6 +258,14 @@ impl PytfRunner {
         self.socket.do_send(WsMessage(ws::Message::Binary(
             [FAILED_HEADER, self.config.name.as_bytes()].concat().into()
         )));
+    }
+}
+
+impl Handler<NewSocket> for PytfRunner {
+    type Result = ();
+    fn handle(&mut self, msg: NewSocket, _ctx: &mut Self::Context) -> Self::Result {
+        log::debug!("Worker connected to new socket");
+        self.socket = msg.addr;
     }
 }
 

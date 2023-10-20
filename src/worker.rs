@@ -1,7 +1,5 @@
 use anyhow::anyhow;
-use actix_web::web::Bytes;
-use awc::ws;
-use pytf_web::{pytf_frame::{AtomNameMap, ATOM_NAME_MAP}, worker_client::WsMessage};
+use pytf_web::pytf_frame::{AtomNameMap, ATOM_NAME_MAP};
 
 use pytf_web::worker_client::PytfServer;
 
@@ -21,16 +19,10 @@ async fn main() -> anyhow::Result<()> {
     // Load atom name map
     let _ = ATOM_NAME_MAP.set(AtomNameMap::from_cli_or_default(std::env::args()));
 
-    // Set up connection to server. Server must be available or this will fail.
-    let pytf_server = PytfServer::connect(server_addr, key).await?;
-    log::debug!("Sending test ping");
-    pytf_server.do_send(WsMessage(ws::Message::Ping(Bytes::from_static(b""))));
+    // Set up connection to server. Will retry if server is unavailable or connection fails.
+    let _ = PytfServer::connect(server_addr, key).await;
 
     let _ = actix_rt::signal::ctrl_c().await?;
     Ok(())
 }
-
-
-
-
 

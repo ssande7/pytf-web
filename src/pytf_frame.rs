@@ -139,7 +139,6 @@ impl SegToProcess {
     }
 }
 
-
 #[derive(Debug)]
 pub struct SegmentProcessor {
     socket: Addr<PytfServer>
@@ -185,5 +184,19 @@ impl Handler<SegToProcess> for SegmentProcessor {
                 .pack_for_ws(&msg.jobname).into()
         )));
         Ok(())
+    }
+}
+
+#[derive(Message)]
+#[rtype(result="()")]
+pub struct NewSocket {
+    pub addr: Addr<PytfServer>,
+}
+
+impl Handler<NewSocket> for SegmentProcessor {
+    type Result = ();
+    fn handle(&mut self, msg: NewSocket, _ctx: &mut Self::Context) -> Self::Result {
+        log::debug!("Segment processor connected to new socket");
+        self.socket = msg.addr;
     }
 }
