@@ -26,7 +26,7 @@ pub const WS_FRAME_SIZE_LIMIT: usize = 25*1024*1024;
 /// - [num_frames x [num_particles x {x: f32}{y: f32}{z: f32}]]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrajectorySegment {
-    data: Bytes
+    pub data: Bytes
 }
 
 pub struct AtomNameMap {

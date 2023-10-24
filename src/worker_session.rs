@@ -153,7 +153,7 @@ impl Handler<JobAssignment> for WorkerWsSession {
     fn handle(&mut self, msg: JobAssignment, ctx: &mut Self::Context) -> Self::Result {
         let job = msg.job;
         let mut job_lock = job.write().unwrap();
-        log::info!("Got job assignment: {job_lock:?}");
+        log::info!("Got job assignment: {}", job_lock.config.name);
         match &job_lock.status {
             JobStatus::Waiting => {
                 job_lock.status = JobStatus::Running(ctx.address());
@@ -285,9 +285,14 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WorkerWsSession {
                                         data: bytes,
                                     });
                                 }
+                                JobStatus::Steal(_) => {
+                                    job.status = JobStatus::Steal(PausedJobData {
+                                        data: bytes,
+                                    });
+                                }
                                 _ => {
                                     log::error!(
-                                        "Job {} in unexpected state when trying to set up for stealing: {:?}",
+                                        "Job {} in unexpected state when trying to set up for stealing: {}",
                                         jobname, job.status);
                                 }
                             }
@@ -319,9 +324,19 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WorkerWsSession {
                     let segment_id = u32::from_le_bytes(bytes[..4].as_ref().try_into().unwrap()) as usize;
                     let segment = TrajectorySegment::new(bytes);
                     if let Some(job) = &self.job {
-                        if let AddSegmentResult::WrongJob(seg) = job_add_seg_and_notify(job, jobname, segment_id, segment) {
-                            log::warn!("Received segment for different job. Forwarding on for processing.");
-                            self.job_server.do_send(seg);
+                        match job_add_seg_and_notify(job, jobname, segment_id, segment) {
+                            AddSegmentResult::WrongJob(seg) => {
+                                log::warn!("Received segment for different job. Forwarding on for processing.");
+                                self.job_server.do_send(seg);
+                            }
+                            AddSegmentResult::NoClients => {
+                                let mut job = job.write().unwrap();
+                                if JobStatus::Running(ctx.address()) == job.status {
+                                    job.status = JobStatus::Paused(ctx.address());
+                                    ctx.address().do_send(WorkerPause { jobname: job.config.name.clone() });
+                                }
+                            }
+                            _ => (),
                         }
                     } else {
                         log::warn!("Received segment, but not assigned a job. Forwarding on for processing.");

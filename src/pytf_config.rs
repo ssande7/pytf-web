@@ -79,6 +79,12 @@ pub struct PytfConfig {
     pub mixture: Vec<MixtureComponent>,
 }
 
+impl PytfConfig {
+    pub fn archive_name(&self) -> String {
+        format!("{}.archive", self.name)
+    }
+}
+
 /// Minimal config information sent from
 /// client to be filled into full PytfConfig
 #[derive(Deserialize, Clone, Debug)]

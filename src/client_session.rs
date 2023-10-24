@@ -4,41 +4,49 @@ use actix::prelude::*;
 use actix_web_actors::ws;
 use pytf_web::pytf_config::{PytfConfigMinimal, PytfConfig};
 
-use crate::job_queue::{Job, JobServer, ClientConnect, ClientDisconnect, ClientReqJob, AssignJobs};
+use crate::job_queue::{Job, JobServer, ClientConnect, ClientDisconnect, ClientReqJob, AssignJobs, JobInner, RegisterJob, AcceptedJob};
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
 
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /** MESSAGES TO CLIENT
-* text("new_frames") => There might be more frames available for current config
-*
-* text("failed") => Job has failed - try a different configuration.
-*
-* text("done") => Job has completed successfully.
 *
 * binary(b"{frame id: u32 little endian}{frame data}") => Frame of current job
 *
-* text("no_seg{parsable to usize}") => requested segment id (sent back) is unavailable
-*
-* text("num_seg{parsable to usize}") => number of segments to expect from the requested job
-*
+* Others:
 */
 
+/// text => There might be more frames available for current config.
+/// Format is "{MSG_NEW_FRAMES}{{l:{latest_frame},f:{n_cycles}}}"
 const MSG_NEW_FRAMES: &str = "new_frames";
+
+/// text => Job has failed.
 const MSG_JOB_FAILED: &str = "failed";
-const MSG_JOB_DONE:   &str = "done";
+
+/// text => Requested segment ID (sent back) is unavailable
+/// Format is "{MSG_SEG_UNAVAILABLE}{segment_id}"
+const MSG_SEG_UNAVAILABLE: &str = "no_seg";
+
+/// text => Job has been queued
 const MSG_JOB_QUEUED: &str = "queued";
 
+
+
 /** MESSAGES FROM CLIENT
-* text("cancel") => Cancel the current job
 *
 * text("{PytfConfigMinimal as json}") => New configuration to run
 *
 * text("{segment_id, parseable to usize}") => Requesting TrajectorySegment data
 *
+* Others:
 */
+
+/// text => Cancel the current job
 const MSG_JOB_CANCEL: &str = "cancel";
+
+
+
 
 #[derive(Debug)]
 pub struct ClientWsSession {
@@ -160,14 +168,21 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
                     if let Some(job) = self.job.take() {
                         job.write().unwrap().remove_client(&ctx.address());
                         ctx.text(MSG_JOB_CANCEL); // Confirm the cancel
+                    } else {
+                        log::warn!("Got a cancel request while not assigned a job");
+                        ctx.text(MSG_JOB_QUEUED); // Queued works as a null response
                     }
                     log::debug!("Done processing cancel for client {}", self.id);
                 } else if let Ok(config) = serde_json::from_str::<PytfConfigMinimal>(&text) {
                     log::info!("Received job config from client {}:\n{config:?}", self.id);
+                    if let Some(old_job) = self.job.take() {
+                        let mut old_job = old_job.write().unwrap();
+                        log::info!("Removing client {} from old job with name {}", self.id, old_job.config.name);
+                        old_job.remove_client(&ctx.address());
+                    }
                     let config: PytfConfig = config.into();
-                    ctx.text(MSG_JOB_QUEUED);
                     self.job_server.send(ClientReqJob {
-                        config,
+                        config: config.clone(),
                         client_id: self.id.clone(),
                         client_addr: ctx.address(),
                         client_prev_job: self.job.clone(),
@@ -175,10 +190,32 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
                     .into_actor(self)
                     .then(|res, act, ctx| {
                         match res {
-                            Ok(job) => {
-                                    act.job = Some(job);
-                                    act.job_server.do_send(AssignJobs {});
-                                }
+                            Ok(AcceptedJob::Existing(job)) => {
+                                act.job = Some(job);
+                                act.job_server.do_send(AssignJobs {});
+                                ctx.text(MSG_JOB_QUEUED);
+                            },
+                            Ok(AcceptedJob::Finished(job)) => {
+                                let ping = { job.read().unwrap().build_ping() };
+                                act.job = Some(job.clone());
+                                ctx.address().do_send(ping);
+                            },
+                            Ok(AcceptedJob::New) => {
+                                // For new jobs, create on client thread
+                                // since could involve slow read from disk
+                                act.job_server.send(RegisterJob {
+                                    job: JobInner::new(config),
+                                    client: ctx.address(),
+                                }).into_actor(act).then(|res, act, ctx| {
+                                    if let Ok(job) = res {
+                                        act.job = Some(job);
+                                    } else {
+                                        ctx.text(MSG_JOB_FAILED);
+                                    }
+                                    fut::ready(())
+                                }).wait(ctx);
+                                ctx.text(MSG_JOB_QUEUED);
+                            }
                             _ => ctx.stop(), // Something went wrong
                         }
                         fut::ready(())
@@ -195,9 +232,15 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
                                 ctx.binary(frame.data());
                             } else {
                                 log::debug!("Client requested segment {segment_id} which is not available.");
-                                ctx.text(format!("no_seg{}", segment_id));
+                                ctx.text(format!("{MSG_SEG_UNAVAILABLE}{}", segment_id));
                             }
+                        } else {
+                            log::debug!("Client requested segment {segment_id} which is beyond the end of the simulation.");
+                            ctx.text(format!("{MSG_SEG_UNAVAILABLE}{}", segment_id));
                         }
+                    } else {
+                        log::debug!("Client requested segment {segment_id} but not assigned a job.");
+                        ctx.text(format!("{MSG_SEG_UNAVAILABLE}{}", segment_id));
                     }
                 } else {
                     log::warn!("Received unknown message from client {}", self.id);
@@ -220,17 +263,20 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
 #[rtype(result="()")]
 pub struct TrajectoryPing {
     pub latest_segment: usize,
-    pub final_segment: bool,
+    pub final_segment: usize,
 }
 
 impl Handler<TrajectoryPing> for ClientWsSession {
     type Result = ();
     /// Notify client of possible extra trajectory data
     fn handle(&mut self, msg: TrajectoryPing, ctx: &mut Self::Context) -> Self::Result {
-        ctx.text(format!("{}{}",
-            if msg.final_segment {MSG_JOB_DONE} else {MSG_NEW_FRAMES},
-            msg.latest_segment
-        ));
+        if self.job.is_some() {
+            ctx.text(format!("{}{{\"l\":{},\"f\":{}}}",
+                MSG_NEW_FRAMES,
+                msg.latest_segment,
+                msg.final_segment
+            ));
+        }
     }
 }
 
@@ -251,19 +297,5 @@ impl Handler<JobFailed> for ClientWsSession {
                 ctx.text(MSG_JOB_FAILED);
             }
         }
-    }
-}
-
-#[derive(Message)]
-#[rtype(result="()")]
-pub struct JobNumSeg {
-    pub n_cycles: usize,
-}
-
-impl Handler<JobNumSeg> for ClientWsSession {
-    type Result = ();
-    /// Notify client that job is running, and how many cycles (segments) to expect
-    fn handle(&mut self, msg: JobNumSeg, ctx: &mut Self::Context) -> Self::Result {
-        ctx.text(format!("num_seg{}", msg.n_cycles));
     }
 }

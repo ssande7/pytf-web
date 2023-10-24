@@ -1,14 +1,30 @@
-use std::{sync::{Arc, RwLock, atomic::{AtomicBool, Ordering}}, collections::HashMap};
+use std::{
+    sync::{Arc, RwLock, atomic::{AtomicBool, Ordering}},
+    collections::HashMap,
+    time::{Duration, Instant},
+    io::{BufReader, BufWriter, Read, Write}, path::PathBuf, fmt::Display
+};
 use actix::prelude::*;
+use actix_web::web::Bytes;
 use pytf_web::{
     pytf_config::PytfConfig,
     pytf_frame::TrajectorySegment
 };
 
 use crate::{
-    client_session::{ClientWsSession, ClientForceDisconnect, TrajectoryPing, JobNumSeg},
+    client_session::{ClientWsSession, ClientForceDisconnect, TrajectoryPing},
     worker_session::{WorkerWsSession, WorkerPause, WorkerIdle}
 };
+
+/// How frequently to check for jobs to archive.
+/// Doubles as age at which jobs are eligible for archiving.
+/// TODO: make this configurable
+const JOB_CLEANUP_INTERVAL: Duration = Duration::from_secs(150);
+const MAX_JOB_AGE: Duration = Duration::from_secs(300);
+
+/// Directory to store archived jobs.
+/// TODO: make this configurable
+const ARCHIVE_DIR: &str = "./job_archive";
 
 // Client
 #[derive(Message)]
@@ -25,7 +41,7 @@ pub struct ClientDisconnect {
 }
 
 #[derive(Message)]
-#[rtype(result = "Job")]
+#[rtype(result = "AcceptedJob")]
 pub struct ClientReqJob {
     pub config: PytfConfig,
     pub client_id: Arc<String>,
@@ -96,14 +112,11 @@ pub struct JobServer {
 
 impl JobServer {
     pub fn new() -> Self {
+        if let Err(e) = std::fs::create_dir_all(format!("{ARCHIVE_DIR}")) {
+            log::warn!("Failed to create archive directory \"{ARCHIVE_DIR}\" with error \"{e}\". Old jobs will not be archived!");
+        }
         let mut job_lookup = HashMap::with_capacity(128);
-        let null_job = JobInner {
-            config: PytfConfig::default(),
-            status: JobStatus::Finished,
-            clients: Vec::with_capacity(32),
-            segments: Vec::new(),
-            latest_segment: 0, // TODO: make this 1 and store empty system?
-        };
+        let null_job = JobInner::new(PytfConfig::default());
         let null_name = null_job.config.name.clone();
         job_lookup.insert(null_name, null_job.wrap());
         Self {
@@ -131,9 +144,7 @@ impl JobServer {
                     Ok(true) => {
                         log::debug!("Sent new job to worker session");
                         let job = job_handle.read().unwrap();
-                        for client in job.clients.iter() {
-                            client.do_send(JobNumSeg { n_cycles: job.config.n_cycles})
-                        }
+                        job.notify_clients_no_timestamp();
                     }
                     Ok(false) => {
                         log::warn!("Worker failed to take job");
@@ -148,10 +159,58 @@ impl JobServer {
             })
             .wait(ctx);
     }
+
+    fn start_cleanup_timer(&self, ctx: &mut <Self as Actor>::Context) {
+        ctx.run_interval(JOB_CLEANUP_INTERVAL, |act, _ctx| {
+            act.cleanup_jobs(Instant::now());
+        });
+    }
+
+    fn cleanup_jobs(&mut self, now: Instant) {
+        self.unfinished_jobs.retain(|job| {
+            if let Ok(mut job_lock) = job.try_write() {
+                let retain = job_lock.archive_if_ready(&now);
+                if !retain {
+                    self.job_lookup.remove(&job_lock.config.name);
+                }
+                retain
+            } else { true }
+        });
+        self.job_lookup.retain(|_jobname, job| {
+            if let Ok(mut job_lock) = job.try_write() {
+                job_lock.archive_if_ready(&now)
+            } else { true }
+        })
+    }
+
+    fn assign_jobs(&mut self, ctx: &mut <Self as Actor>::Context) {
+        log::debug!("Assigning unallocated jobs");
+        let unassigned_jobs = self.unfinished_jobs.iter().filter(|job| is_job_runnable(job));
+
+        let mut count = 0;
+        for (job, worker) in unassigned_jobs.zip(
+            self.worker_sessions.iter().filter(|w| w.idle.load(Ordering::Acquire))
+        ) {
+            worker.idle.store(false, Ordering::Release);
+            self.send_job_to_worker(JobAssignment { job: job.clone(), }, worker, ctx);
+            count += 1;
+        }
+        log::info!("Assigned {count} jobs");
+    }
 }
 
 impl Actor for JobServer {
     type Context = Context<Self>;
+
+    fn started(&mut self, ctx: &mut Self::Context) {
+        log::debug!("Starting cleanup timer");
+        self.start_cleanup_timer(ctx);
+    }
+
+    fn stopped(&mut self, _ctx: &mut Self::Context) {
+        log::debug!("Triggering final cleanup.");
+        self.cleanup_jobs(Instant::now() + 2*MAX_JOB_AGE);
+    }
 }
 
 impl Handler<ClientConnect> for JobServer {
@@ -214,23 +273,18 @@ impl Handler<AssignJobs> for JobServer {
     type Result = ();
 
     fn handle(&mut self, _msg: AssignJobs, ctx: &mut Self::Context) -> Self::Result {
-        log::debug!("Assigning unallocated jobs");
-        let unassigned_jobs = self.unfinished_jobs.iter().filter(|job| is_job_runnable(job));
-
-        let mut count = 0;
-        for (job, worker) in unassigned_jobs.zip(
-            self.worker_sessions.iter().filter(|w| w.idle.load(Ordering::Acquire))
-        ) {
-            worker.idle.store(false, Ordering::Release);
-            self.send_job_to_worker(JobAssignment { job: job.clone(), }, worker, ctx);
-            count += 1;
-        }
-        log::info!("Assigned {count} jobs");
+        self.assign_jobs(ctx);
     }
 }
 
+pub enum AcceptedJob {
+    New,
+    Existing(Job),
+    Finished(Job),
+}
+
 impl Handler<ClientReqJob> for JobServer {
-    type Result = Job;
+    type Result = MessageResult<ClientReqJob>;
 
     fn handle(&mut self, msg: ClientReqJob, _ctx: &mut Self::Context) -> Self::Result {
         // Check whether job already exists.
@@ -240,50 +294,55 @@ impl Handler<ClientReqJob> for JobServer {
         let existing = self.job_lookup.get(&jobname).and_then(|j| Some(j.clone()));
         if let Some(job) = existing {
             // Attach client to job.
-            let mut job_lock = job.write().unwrap();
-            log::info!("Job with name {} already exists.", job_lock.config.name);
-            log::debug!("Updated timestamp for job {}", job_lock.config.name);
+            let finished = {
+                let mut job_lock = job.write().unwrap();
+                log::info!("Job with name {} already exists.", job_lock.config.name);
 
-            // If client wasn't already attached to that job, remove them from their old job
-            if !job_lock.clients.contains(&msg.client_addr) {
-                job_lock.clients.push(msg.client_addr.clone());
-                log::debug!("Checking client's old job");
-                if let Some(old_job) = msg.client_prev_job {
-                    let mut old_job = old_job.write().unwrap();
-                    log::debug!("Removing client {} from old job with name {}", msg.client_id, old_job.config.name);
-                    old_job.remove_client(&msg.client_addr);
+                // If client wasn't already attached to that job, remove them from their old job
+                if !job_lock.clients.contains(&msg.client_addr) {
+                    job_lock.clients.push(msg.client_addr.clone());
                 }
-                log::debug!("Finished cleaning up after {}", msg.client_id);
-            } // NOTE: Assuming client_map can't get out of sync. Might need a test here if it can.
-            log::debug!("Returning job handle");
-            // Ping the client to let them know there are already frames available
-            msg.client_addr.do_send(job_lock.build_ping());
-            job.clone()
-        } else {
-            // Create new job and attach client
-            log::info!("Creating new job for client {}", msg.client_id);
-            let mut clients = Vec::with_capacity(32);
-            clients.push(msg.client_addr.clone());
-            // Each frame pack is one cycle worth of data
-            let new_job = JobInner {
-                segments: vec![None; msg.config.n_cycles],
-                latest_segment: 0,
-                config: msg.config,
-                status: JobStatus::Waiting,
-                clients,
-            }.wrap();
-            self.job_lookup.insert(jobname, new_job.clone());
-            // Add new job to list of unfinished ones
-            self.unfinished_jobs.push(new_job.clone());
-            if let Some(old_job) = msg.client_prev_job {
-                let mut old_job = old_job.write().unwrap();
-                log::info!("Removing client {} from old job with name {}", msg.client_id, old_job.config.name);
-                old_job.remove_client(&msg.client_addr);
+                job_lock.status == JobStatus::Finished
+            };
+            if finished {
+                MessageResult(AcceptedJob::Finished(job))
+            } else {
+                MessageResult(AcceptedJob::Existing(job))
             }
-            new_job
+        } else {
+            MessageResult(AcceptedJob::New)
         }
     }
 }
+
+#[derive(Message)]
+#[rtype(result="Job")]
+pub struct RegisterJob {
+    pub client: Addr<ClientWsSession>,
+    pub job: JobInner,
+}
+impl Handler<RegisterJob> for JobServer {
+    type Result = Job;
+    fn handle(&mut self, msg: RegisterJob, ctx: &mut Self::Context) -> Self::Result {
+        let jobname = msg.job.config.name.clone();
+        if let Some(job) = self.job_lookup.get(&jobname) {
+            // Job may have been registered by another client while loading
+            job.write().unwrap().clients.push(msg.client);
+            job.clone()
+        } else {
+            let mut job = msg.job;
+            let finished = job.status == JobStatus::Finished;
+            job.clients.push(msg.client);
+            if finished { job.notify_clients(); }
+            let job = job.wrap();
+            self.job_lookup.insert(jobname, job.clone());
+            if !finished { self.unfinished_jobs.push(job.clone()); }
+            self.assign_jobs(ctx);
+            job
+        }
+    }
+}
+
 
 impl Handler<WorkerConnect> for JobServer {
     type Result = ();
@@ -335,8 +394,10 @@ impl Handler<UnhandledTrajectorySegment> for JobServer {
     type Result = ();
     fn handle(&mut self, msg: UnhandledTrajectorySegment, _ctx: &mut Self::Context) -> Self::Result {
         if let Some(job) = self.job_lookup.get(&msg.jobname) {
-            if AddSegmentResult::Ok != job_add_seg_and_notify(job, &msg.jobname, msg.segment_id, msg.segment) {
-                log::error!("Failed to store data for segment {} of job {}", msg.segment_id, msg.jobname);
+            match job_add_seg_and_notify(job, &msg.jobname, msg.segment_id, msg.segment) {
+                AddSegmentResult::IdTooLarge | AddSegmentResult::WrongJob(_)
+                    => log::error!("Failed to store data for segment {} of job {}", msg.segment_id, msg.jobname),
+                _ => (),
             }
         } else {
             log::warn!("Received segment data for unknown job");
@@ -351,6 +412,7 @@ pub struct JobInner {
     pub clients: Vec<Addr<ClientWsSession>>,
     pub segments: Vec<Option<TrajectorySegment>>,
     pub latest_segment: usize,
+    pub timestamp: Instant,
 }
 pub type Job = Arc<RwLock<JobInner>>;
 
@@ -384,9 +446,54 @@ pub enum JobStatus {
     Finished,
     /// Job has failed
     Failed,
+    /// Job is archived to disk. Could be Waiting, Steal, Finished or Failed
+    Archived,
+}
+
+impl Display for JobStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Waiting       => "Waiting",
+            Self::Running(_)    => "Running",
+            Self::Paused(_)     => "Paused",
+            Self::Steal(_)      => "Ready to Steal",
+            Self::Stealing(_,_) => "Being Stolen",
+            Self::Finished      => "Finished",
+            Self::Failed        => "Failed",
+            Self::Archived      => "Archived",
+        })
+    }
 }
 
 impl JobInner {
+    /// Create a new job. Will attempt to load from archive on disk,
+    /// or create a new job with the Waiting status if loading fails
+    pub fn new(config: PytfConfig) -> Self {
+        if PathBuf::from(ARCHIVE_DIR).join(config.archive_name()).is_file() {
+             match Self::load(config.clone()) {
+                Ok(job) => {
+                    if job.status == JobStatus::Finished {
+                        job.notify_clients_no_timestamp();
+                    }
+                    // For "Steal" jobs, the job will just be queued and
+                    // report back segments once it starts running.
+                    return job;
+                },
+                Err(e) => {
+                    log::warn!("Error \"{e}\" while loading archived job \"{}\". Generating new job instead.", config.name);
+                }
+            }
+        }
+        JobInner {
+            segments: vec![None; config.n_cycles],
+            latest_segment: 0,
+            config,
+            status: JobStatus::Waiting,
+            clients: Vec::with_capacity(32),
+            timestamp: Instant::now(),
+        }
+    }
+
     pub fn wrap(self) -> Job {
         Arc::new(RwLock::new(self))
     }
@@ -399,10 +506,18 @@ impl JobInner {
         self.clients.swap_remove(client_idx);
         if self.clients.is_empty() {
             log::debug!("Job with name {} is now empty.", self.config.name);
-            if let JobStatus::Running(worker) = &self.status {
-                worker.do_send(WorkerPause { jobname: self.config.name.clone() });
-                self.status = JobStatus::Paused(worker.clone());
-            }
+            let status = std::mem::replace(&mut self.status, JobStatus::Waiting); // Store cheap temp. state
+            self.status = match status {
+                JobStatus::Running(worker) => {
+                    worker.do_send(WorkerPause { jobname: self.config.name.clone() });
+                    JobStatus::Paused(worker)
+                },
+                JobStatus::Stealing(pause_data, worker) => {
+                    worker.do_send(WorkerPause { jobname: self.config.name.clone() });
+                    JobStatus::Steal(pause_data)
+                }
+                other => other,
+            };
         }
     }
 
@@ -428,24 +543,141 @@ impl JobInner {
             self.latest_segment = segment_id;
             log::debug!("Latest segment updated for job {}.", self.config.name);
         }
-        AddSegmentResult::Ok
+        self.timestamp = Instant::now();
+        if self.clients.is_empty() { AddSegmentResult::NoClients }
+        else { AddSegmentResult::Ok }
     }
 
     pub fn build_ping(&self) -> TrajectoryPing {
         TrajectoryPing {
             latest_segment: self.latest_segment,
-            final_segment: self.latest_segment == self.segments.len(),
+            final_segment: self.segments.len(),
         }
     }
 
     /// Ping clients interested in job about new trajectory frame
-    pub fn notify_clients(&self) {
+    /// self needs to be mutable to save timestamp
+    pub fn notify_clients(&mut self) {
+        self.timestamp = Instant::now();
+        self.notify_clients_no_timestamp();
+    }
+
+    pub fn notify_clients_no_timestamp(&self) {
         let ping = self.build_ping();
         log::debug!("Sending ping: {ping:?}");
         for client in &self.clients {
             client.do_send(ping);
         }
     }
+
+    pub fn archive_if_ready(&mut self, now: &Instant) -> bool {
+        // If job was recently touched or has attached clients, don't archive it
+        if now.duration_since(self.timestamp) < MAX_JOB_AGE || self.clients.len() > 0 {
+            return true;
+        }
+        match self.status {
+            JobStatus::Finished | JobStatus::Steal(_) => {
+                // Job is stale and has no attached clients, so archive it to disk
+                // and remove it from the job lookup table.
+                match self.archive() {
+                    Ok(_) => false,
+                    Err(e) => {
+                        log::warn!("Failed to archive job \"{}\" with error \"{e}\"", self.config.name);
+                        self.timestamp = now.clone(); // Avoid retrying immediately
+                        true
+                    }
+                }
+            },
+            JobStatus::Waiting | JobStatus::Failed => false, // Just remove abandoned Waiting jobs.
+            _ => true,
+        }
+    }
+
+    pub fn archive(&mut self) -> std::io::Result<()> {
+        let fid = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(PathBuf::from(ARCHIVE_DIR).join(self.config.archive_name()))?;
+        let mut fid = BufWriter::new(fid);
+        // No need to write config, since we only need to open the file again if we get another
+        // (matching) config that leads to it.
+        if let JobStatus::Steal(pause_data) = &self.status {
+            fid.write_all(&pause_data.data.len().to_le_bytes())?;
+            fid.write_all(&pause_data.data)?;
+        } else {
+            fid.write_all(&(0 as usize).to_le_bytes())?;
+            let status: usize = match self.status {
+                JobStatus::Finished => 1,
+                // Space to include other job statuses if needed
+                _ => {
+                    log::error!("Invalid job status while writing archived job");
+                    return Err(std::io::ErrorKind::InvalidData.into());
+                }
+            };
+            fid.write_all(&status.to_le_bytes())?;
+        }
+        fid.write_all(&self.latest_segment.to_le_bytes())?;
+        for seg in self.segments.iter().take(self.latest_segment) {
+            if let Some(seg) = seg {
+                fid.write_all(&seg.data().len().to_le_bytes())?;
+                fid.write_all(&seg.data())?;
+            } else {
+                fid.write_all(&(0 as usize).to_le_bytes())?;
+            }
+        }
+        fid.flush()?;
+        log::debug!("Archived job {}", self.config.name);
+        self.status = JobStatus::Archived;
+        Ok(())
+    }
+
+    pub fn load(config: PytfConfig) -> std::io::Result<Self> {
+        let fid = std::fs::OpenOptions::new()
+            .read(true)
+            .open(PathBuf::from(ARCHIVE_DIR).join(config.archive_name()))?;
+        let mut fid = BufReader::new(fid);
+
+        let pause_bytes = read_le_usize(&mut fid)?;
+        let status = if pause_bytes > 0 {
+            let mut resume_data: Vec<u8> = vec![0u8; pause_bytes];
+            fid.read_exact(&mut resume_data)?;
+            JobStatus::Steal(PausedJobData { data: Bytes::from(resume_data) })
+        } else {
+            match read_le_usize(&mut fid)? {
+                1 => JobStatus::Finished,
+                _ => {
+                    log::error!("Invalid job status while reading archived job");
+                    return Err(std::io::ErrorKind::InvalidData.into());
+                }
+            }
+        };
+        let latest_segment = read_le_usize(&mut fid)?;
+        let mut segments: Vec<Option<TrajectorySegment>> = vec![None; config.n_cycles];
+        for i in 0..latest_segment {
+            let bytes = read_le_usize(&mut fid)?;
+            if bytes > 0 {
+                let mut seg_data: Vec<u8> = vec![0u8; bytes];
+                fid.read_exact(&mut seg_data)?;
+                segments[i] = Some(TrajectorySegment { data: Bytes::from(seg_data) });
+            }
+        }
+        log::debug!("Loaded job {} from archive", config.name);
+        Ok(Self {
+            config,
+            status,
+            clients: Vec::new(), // Not setting capacity since this could be overwritten
+            segments,
+            latest_segment,
+            timestamp: Instant::now(),
+        })
+    }
+}
+
+fn read_le_usize(fid: &mut BufReader<impl Read>) -> std::io::Result<usize> {
+    let mut out = [0u8; 8];
+    fid.read_exact(&mut out)?;
+    Ok(usize::from_le_bytes(out))
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -456,18 +688,17 @@ pub enum AddSegmentResult {
     WrongJob(UnhandledTrajectorySegment),
     /// Segment id was larger than the expected last segment
     IdTooLarge,
+    /// No clients left attached to the job
+    NoClients,
 }
 
 /// Add a segment to the specified job if the job's name matches the expected name, and notify
 /// any attached clients that more frames are available.
 pub fn job_add_seg_and_notify(job: &Job, expected_name: impl AsRef<str>, segment_id: usize, segment: TrajectorySegment)
 -> AddSegmentResult {
-    let out = {
-        let mut job = job.write().unwrap();
-        job.add_segment(expected_name, segment_id, segment)
-    };
+    let mut job = job.write().unwrap();
+    let out = job.add_segment(expected_name, segment_id, segment);
     if out == AddSegmentResult::Ok {
-        let job = job.read().unwrap();
         job.notify_clients();
     }
     out

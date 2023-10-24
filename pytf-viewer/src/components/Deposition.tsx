@@ -125,11 +125,11 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
         }
       }).catch(console.error);
 
-    } else if (last_message.data.startsWith("new_frames") || last_message.data.startsWith("done")) {
-      const done = last_message.data.startsWith("done");
-      // console.log("Received trajectory ping: ", last_message.data);
-      const latest_segment = Number.parseInt(last_message.data.slice(done ? 4 : 10));
-      if (done) { setSimDone(true); }
+    } else if (last_message.data.startsWith("new_frames")) {
+      const packet = JSON.parse(last_message.data.slice(10));
+      const latest_segment = packet.l;
+      if (num_segments !== packet.f) { setNumSegments(packet.f); }
+      if (latest_segment === packet.f) { setSimDone(true); }
       setLatestSegment((prev) => latest_segment > prev ? latest_segment : prev);
       setWaitForSegment((waiting) => {
         if (!waiting && latest_segment >= next_segment && socket.current) {
@@ -146,9 +146,6 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
       const seg = Number.parseInt(last_message.data.slice(6));
       // console.log("Segment not available yet: ", seg);
       setWaitForSegment((waiting) => seg === next_segment ? false : waiting);
-
-    } else if (last_message.data.startsWith("num_seg")) {
-      setNumSegments(Number.parseInt(last_message.data.slice(7)));
 
     } else if (last_message.data === "cancel") {
       setRunning(false);
@@ -213,6 +210,7 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
             setFailed(false);
             setNextSegment(1);
             setLatestSegment(0);
+            setNumSegments(0);
             setLastFrame(0);
             setWaitForSegment(false);
             setParticles(particles);
