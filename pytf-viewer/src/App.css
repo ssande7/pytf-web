@@ -83,7 +83,6 @@
   row-gap: 1pt;
   padding-left: 5pt;
   overflow-x: hidden;
-  overflow-y: scroll;
   background-color: #222;
   border-right-color: #444;
   border-right-style: solid;
@@ -162,7 +161,6 @@
 
 .MD-param-group {
   flex-grow: 1;
-  overflow-y: scroll;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -226,7 +224,7 @@
   cursor: pointer;
   align-self: stretch;
 }
-.submit-button:hover {
+.submit-button:not([disabled]):hover {
   background-color: #00b33c;
 }
 .submit-button:disabled {
@@ -237,14 +235,14 @@
 .cancel {
   background-color: #992600;
 }
-.cancel:hover {
+.cancel:not([disabled]):hover {
   background-color: #b32d00;
 }
 
 .roughness {
   background-color: #002699;
 }
-.roughness:hover {
+.roughness:not([disabled]):hover {
   background-color: #002db3;
 }
 

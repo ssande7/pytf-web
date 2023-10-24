@@ -62,7 +62,7 @@ const Composition: React.FC<IComposition>
         molecules={molecules}
         config={config} setConfig={setConfig}
       />
-      <div className="collapsible">
+      <div className="collapsible no-hover">
         <b>Protocol</b>
       </div>
       <div className="collapsible-content">

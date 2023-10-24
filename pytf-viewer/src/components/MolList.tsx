@@ -48,7 +48,7 @@ const MolList: React.FC<IMolList> =
   }
 
   return (<>
-      <div className="collapsible">
+      <div className="collapsible no-hover">
         <b>Composition</b>
       </div>
       <div className="collapsible-content"
