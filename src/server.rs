@@ -19,9 +19,12 @@ use client_session::ClientWsSession;
 mod worker_session;
 use worker_session::WorkerWsSession;
 
+mod server_args;
+use server_args::parse_args;
+
 use pytf_web::{
-    authentication::{self, UserDB, LoginToken, UserCredentials},
-    pytf_config::{AVAILABLE_MOLECULES, MoleculeResources},
+    authentication::{self, LoginToken, UserCredentials},
+    pytf_config::AVAILABLE_MOLECULES,
     pytf_frame::WS_FRAME_SIZE_LIMIT
 };
 
@@ -117,19 +120,17 @@ async fn molecules(_user: Identity) -> impl Responder {
 async fn main() -> std::io::Result<()> {
     env_logger::init();
 
-    // Load user database
-    let _ = authentication::USER_DB.set(UserDB::from_cli_or_default(std::env::args()));
+    let (server, redis) = match parse_args() {
+        Ok(addr) => addr,
+        Err(e) => {
+            return Err(Error::new(ErrorKind::InvalidInput,
+                format!("Error parsing command line arguments: {e}")));
+        }
+    };
 
-    // Load list of available molecules
-    let _ = AVAILABLE_MOLECULES.set(MoleculeResources::from_cli_or_default(std::env::args()));
-
-    let address = "127.0.0.1";
-    let port = 8080;
-    let redis_port = 6379;
 
     let secret_key = Key::generate();
-    let redis_address = format!("redis://127.0.0.1:{redis_port}");
-    let redis_store = RedisSessionStore::new(redis_address)
+    let redis_store = RedisSessionStore::new(format!("redis://{}:{}", redis.address, redis.port))
         .await
         .expect("Could not connect to redis-server");
 
@@ -173,7 +174,7 @@ async fn main() -> std::io::Result<()> {
             .service(molecules)
             .service(Files::new("/", FRONTEND_ROOT))
     })
-    .bind((address, port))?
+    .bind((server.address, server.port))?
     .run()
     .await
 }

@@ -15,11 +15,23 @@ export const Lx = 3.9352 // y -> x
 // Omovi atom types in periodic table order
 // Used to retrieve Omovi atom type from element number in data
 export const atom_types = [
-    AtomTypes.H,
-    AtomTypes.H, AtomTypes.He,
-    AtomTypes.Li, AtomTypes.Be, AtomTypes.B, AtomTypes.C, AtomTypes.N, AtomTypes.O, AtomTypes.F,
-    AtomTypes.Ne, AtomTypes.Na, AtomTypes.Mg, AtomTypes.Al, AtomTypes.Si, AtomTypes.P, AtomTypes.S,
-    AtomTypes.Cl, AtomTypes.Ar, AtomTypes.K, AtomTypes.Ca,
+  AtomTypes.H, AtomTypes.He, AtomTypes.Li, AtomTypes.Be, AtomTypes.B, AtomTypes.C, AtomTypes.N,
+  AtomTypes.O, AtomTypes.F, AtomTypes.Ne, AtomTypes.Na, AtomTypes.Mg, AtomTypes.Al, AtomTypes.Si,
+  AtomTypes.P, AtomTypes.S, AtomTypes.Cl, AtomTypes.Ar, AtomTypes.K, AtomTypes.Ca, AtomTypes.Sc,
+  AtomTypes.Ti, AtomTypes.V, AtomTypes.Cr, AtomTypes.Mn, AtomTypes.Fe, AtomTypes.Co, AtomTypes.Ni,
+  AtomTypes.Cu, AtomTypes.Zn, AtomTypes.Ga, AtomTypes.Ge, AtomTypes.As, AtomTypes.Se, AtomTypes.Br,
+  AtomTypes.Kr, AtomTypes.Rb, AtomTypes.Sr, AtomTypes.Y, AtomTypes.Zr, AtomTypes.Nb, AtomTypes.Mo,
+  AtomTypes.Tc, AtomTypes.Ru, AtomTypes.Rh, AtomTypes.Pd, AtomTypes.Ag, AtomTypes.Cd, AtomTypes.In,
+  AtomTypes.Sn, AtomTypes.Sb, AtomTypes.Te, AtomTypes.I, AtomTypes.Xe, AtomTypes.Cs, AtomTypes.Ba,
+  AtomTypes.La, AtomTypes.Ce, AtomTypes.Pr, AtomTypes.Nd, AtomTypes.Pm, AtomTypes.Sm, AtomTypes.Eu,
+  AtomTypes.Gd, AtomTypes.Tb, AtomTypes.Dy, AtomTypes.Ho, AtomTypes.Er, AtomTypes.Tm, AtomTypes.Yb,
+  AtomTypes.Lu, AtomTypes.Hf, AtomTypes.Ta, AtomTypes.W, // AtomTypes.Re, AtomTypes.Os, AtomTypes.Ir,
+  // AtomTypes.Pt, AtomTypes.Au, AtomTypes.Hg, AtomTypes.Tl, AtomTypes.Pb, AtomTypes.Bi, AtomTypes.Po,
+  // AtomTypes.At, AtomTypes.Rn, AtomTypes.Fr, AtomTypes.Ra, AtomTypes.Ac, AtomTypes.Th, AtomTypes.Pa,
+  // AtomTypes.U, AtomTypes.Np, AtomTypes.Pu, AtomTypes.Am, AtomTypes.Cm, AtomTypes.Bk, AtomTypes.Cf,
+  // AtomTypes.Es, AtomTypes.Fm, AtomTypes.Md, AtomTypes.No, AtomTypes.Lr, AtomTypes.Rf, AtomTypes.Db,
+  // AtomTypes.Sg, AtomTypes.Bh, AtomTypes.Hs, AtomTypes.Mt, AtomTypes.Ds, AtomTypes.Rg, AtomTypes.Cn,
+  // AtomTypes.Nh, AtomTypes.Fl, AtomTypes.Mc, AtomTypes.Lv, AtomTypes.Ts, AtomTypes.Og
   ];
 
 function heatMapColor(value: number){

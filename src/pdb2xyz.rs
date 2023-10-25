@@ -21,8 +21,7 @@ pub fn pdb2xyz<P: AsRef<Path>>(pdbfile: P) -> anyhow::Result<Vec<Atom>> {
         line.clear();
     }
 
-    let name_map = ATOM_NAME_MAP.get_or_init(
-        || AtomNameMap::from_cli_or_default(std::env::args()));
+    let name_map = ATOM_NAME_MAP.get_or_init(AtomNameMap::create);
     loop {
         if !line.starts_with("HETATM") { break }
         let x: f32 = line.get(30..38).ok_or(anyhow!("x coordinate not found"))?.trim().parse()?;

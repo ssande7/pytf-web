@@ -1,4 +1,10 @@
-use std::{io::{Read, BufReader}, sync::OnceLock, collections::HashMap, fs::File, env::Args, ffi::CStr};
+use std::{
+    io::{Read, BufReader},
+    sync::OnceLock,
+    collections::HashMap,
+    fs::File,
+    ffi::CStr,
+};
 
 use actix::prelude::*;
 use actix_web::web::Bytes;
@@ -30,27 +36,22 @@ pub struct TrajectorySegment {
 }
 
 pub struct AtomNameMap {
-    pub map: HashMap<String, u8>,
+    pub map: HashMap<&'static str, u8>,
 }
 pub static ATOM_NAME_MAP: OnceLock<AtomNameMap> = OnceLock::new();
 impl AtomNameMap {
-    pub fn from_cli_or_default(mut args: Args) -> Self {
-        let mut atom_map_file = "resources/atom_types.json".into();
-        while let Some(arg) = args.next() {
-            if arg == "--atom-map" {
-                let Some(fname) = args.next() else {
-                    panic!("No atom map file specified with --atom-map flag");
-                };
-                atom_map_file = fname;
-            }
-        }
-        Self {
-            map: serde_json::from_reader(
-                    BufReader::new(
-                        File::open(atom_map_file)
-                            .expect("Couldn't open atom map file: {atom_map_file}")))
-                .expect("Failed to read atom map file: {atom_map_file}")
-        }
+    pub fn create() -> Self {
+        Self { map: HashMap::from_iter([
+            "H", "HE", "LI", "BE", "B", "C", "N", "O", "F", "NE", "NA", "MG", "AL", "SI", "P", "S",
+            "CL", "AR", "K", "CA", "SC", "TI", "V", "CR", "MN", "FE", "CO", "NI", "CU", "ZN", "GA",
+            "GE", "AS", "SE", "BR", "KR", "RB", "SR", "Y", "ZR", "NB", "MO", "TC", "RU", "RH",
+            "PD", "AG", "CD", "IN", "SN", "SB", "TE", "I", "XE", "CS", "BA", "LA", "CE", "PR",
+            "ND", "PM", "SM", "EU", "GD", "TB", "DY", "HO", "ER", "TM", "YB", "LU", "HF", "TA",
+            "W", "RE", "OS", "IR", "PT", "AU", "HG", "TL", "PB", "BI", "PO", "AT", "RN", "FR",
+            "RA", "AC", "TH", "PA", "U", "NP", "PU", "AM", "CM", "BK", "CF", "ES", "FM", "MD",
+            "NO", "LR", "RF", "DB", "SG", "BH", "HS", "MT", "DS", "RG", "CN", "NH", "FL", "MC",
+            "LV", "TS", "OG"
+        ].iter().enumerate().map(|(idx, atom)| (*atom, idx as u8)))}
     }
 }
 

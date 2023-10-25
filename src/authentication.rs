@@ -5,10 +5,10 @@ use argon2::{
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    env::Args,
     fs,
     io::{self, BufRead},
     sync::OnceLock,
+    path::Path,
 };
 
 pub static USER_DB: OnceLock<UserDB> = OnceLock::new();
@@ -39,36 +39,11 @@ impl UserCredentials {
 pub struct UserDB(HashMap<String, String>);
 
 impl UserDB {
-    pub fn from_cli_or_default(mut args: Args) -> Self {
-        while let Some(arg) = args.next() {
-            if arg == "--users" || arg == "-u" {
-                let Some(fname) = args.next() else {
-                    log::warn!("No file specified with --users flag. Users will not be loaded!");
-                    return Default::default()
-                };
-                log::debug!("Reading users from {fname}");
-
-                let file = match fs::File::open(fname) {
-                    Ok(fid) => fid,
-                    Err(e) => {
-                        log::error!("Error while opening users file: {e}");
-                        return Default::default();
-                    }
-                };
-                let out = match UserDB::from_csv(file) {
-                    Ok(db) => {
-                        db
-                    }
-                    Err(e) => {
-                        log::error!("Error while reading users: {e}");
-                        Default::default()
-                    }
-                };
-                log::debug!("Done reading users");
-                return out;
-            }
-        }
-        Default::default()
+    pub fn load(fname: impl AsRef<Path>) -> std::io::Result<Self> {
+        log::debug!("Reading users from {}", fname.as_ref().to_string_lossy());
+        let out = UserDB::from_csv(fs::File::open(fname)?)?;
+        log::debug!("Done reading users");
+        Ok(out)
     }
 
     /// Read a comma separated list of username,password_hash (no space between!)

@@ -1,3 +1,6 @@
 /target
 dump.rdb
 /pyenv
+/job_archive
+/work_*
+test_users.hashed

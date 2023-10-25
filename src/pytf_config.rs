@@ -1,4 +1,4 @@
-use std::{hash::{Hash, Hasher}, env::Args, sync::OnceLock};
+use std::{hash::{Hash, Hasher}, sync::OnceLock, path::{Path, PathBuf}};
 use num::integer::Integer;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -29,32 +29,25 @@ pub struct MoleculeResources {
 }
 
 impl MoleculeResources {
-    pub fn from_cli_or_default(mut args: Args) -> Self {
-        // TODO: proper error handling
-        let mut mols_file = "resources/name_map.json".into();
-        while let Some(arg) = args.next() {
-            if arg == "-m" || arg == "--molecules" {
-                mols_file = args.next().expect("Missing argument for -m/--molecules. Please provide a json file.");
-                break;
-            }
-        }
-        let mut molecules: MoleculeResources = serde_json::from_str(
-            &std::fs::read_to_string(&mols_file)
-                .expect(&format!("Failed to read molecules json file: {}", &mols_file))
-        ).expect("Failed to parse molecules json file");
+    pub fn load(file: impl AsRef<Path>) -> anyhow::Result<Self> {
+        let mut molecules: MoleculeResources =
+            serde_json::from_str(&std::fs::read_to_string(&file)?)?;
         log::debug!("Beginning parsing .pdb files");
+        let mut path = PathBuf::from(RESOURCES_DIR);
+        path.push("molecules");
         for mol in molecules.molecules.iter_mut() {
-            mol.atoms = Some(
-                pdb2xyz(format!("resources/molecules/{}.pdb", mol.res_name))
+            mol.atoms = Some({
+                pdb2xyz(path.join(format!("{}.pdb", mol.res_name)))
                     .expect(&format!("Failed to parse pdb file for {}", mol.res_name))
-            );
+            });
         }
         log::debug!("Done parsing .pdb files");
-        molecules
+        Ok(molecules)
     }
 }
 
 // TODO: Make this configurable
+pub const RESOURCES_DIR: &str = "resources";
 pub static AVAILABLE_MOLECULES: OnceLock<MoleculeResources> = OnceLock::new();
 pub const INSERTIONS_PER_RUN: usize = 4;
 pub const DEPOSITION_STEPS:   usize = 36;
@@ -198,11 +191,10 @@ pub struct MixtureComponent {
     ratio: usize
 }
 
-// TODO: Make resources/ a configurable directory
 impl MixtureComponent {
     fn fill_fields(&mut self) {
-        self.pdb_file = Some(format!("resources/molecules/{}.pdb", &self.res_name));
-        self.itp_file = Some(format!("resources/molecules/{}.itp", &self.res_name));
+        self.pdb_file = Some(format!("{RESOURCES_DIR}/molecules/{}.pdb", &self.res_name));
+        self.itp_file = Some(format!("{RESOURCES_DIR}/molecules/{}.itp", &self.res_name));
     }
 }
 

@@ -6,7 +6,7 @@ use bincode;
 
 use crate::{
     pytf::*,
-    pytf_config::PytfConfig,
+    pytf_config::{PytfConfig, RESOURCES_DIR},
     worker_client::{
         PytfServer, WsMessage,
         PAUSE_HEADER, FAILED_HEADER, DONE_HEADER
@@ -226,7 +226,7 @@ impl PytfRunner {
         // Create config.yml in working directory if it doesn't already exist
         config_yml.push("config.yml");
         if !config_yml.is_file() {
-            std::fs::copy("resources/base_config.yml", &config_yml)?;
+            std::fs::copy(PathBuf::from(RESOURCES_DIR).join("base_config.yml"), &config_yml)?;
 
             // Write config.yml to jobname directory
             let mut config_file = std::fs::OpenOptions::new()

@@ -16,8 +16,8 @@ async fn main() -> anyhow::Result<()> {
         return Err(anyhow!("Missing key string argument"));
     };
 
-    // Load atom name map
-    let _ = ATOM_NAME_MAP.set(AtomNameMap::from_cli_or_default(std::env::args()));
+    // Generate atom name map
+    let _ = ATOM_NAME_MAP.set(AtomNameMap::create());
 
     // Set up connection to server. Will retry if server is unavailable or connection fails.
     let _ = PytfServer::connect(server_addr, key).await;
