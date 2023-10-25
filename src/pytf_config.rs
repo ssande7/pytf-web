@@ -42,12 +42,14 @@ impl MoleculeResources {
             &std::fs::read_to_string(&mols_file)
                 .expect(&format!("Failed to read molecules json file: {}", &mols_file))
         ).expect("Failed to parse molecules json file");
+        log::debug!("Beginning parsing .pdb files");
         for mol in molecules.molecules.iter_mut() {
             mol.atoms = Some(
                 pdb2xyz(format!("resources/molecules/{}.pdb", mol.res_name))
                     .expect(&format!("Failed to parse pdb file for {}", mol.res_name))
             );
         }
+        log::debug!("Done parsing .pdb files");
         molecules
     }
 }
