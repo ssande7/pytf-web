@@ -17,6 +17,10 @@ path = "src/server.rs"
 name = "pytf-worker"
 path = "src/worker.rs"
 
+[[bin]]
+name = "pytf-hash-users"
+path = "src/hash_users.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

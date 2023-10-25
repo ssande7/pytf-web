@@ -1,5 +1,5 @@
 use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    password_hash::{PasswordHash, PasswordVerifier},
     Argon2,
 };
 use serde::{Deserialize, Serialize};
@@ -33,15 +33,6 @@ impl UserCredentials {
     pub fn get_id(&self) -> String {
         self.username.clone()
     }
-
-    fn password_hash(&self) -> String {
-        let argon2 = Argon2::default();
-        let salt = SaltString::generate(&mut OsRng);
-        argon2
-            .hash_password(self.password.as_str().as_bytes(), &salt)
-            .expect("Error hashing password")
-            .to_string()
-    }
 }
 
 #[derive(Debug, Default)]
@@ -52,7 +43,7 @@ impl UserDB {
         while let Some(arg) = args.next() {
             if arg == "--users" || arg == "-u" {
                 let Some(fname) = args.next() else {
-                    log::warn!("no file specified with --users flag. Users will not be loaded!");
+                    log::warn!("No file specified with --users flag. Users will not be loaded!");
                     return Default::default()
                 };
                 log::debug!("Reading users from {fname}");
@@ -64,21 +55,23 @@ impl UserDB {
                         return Default::default();
                     }
                 };
-                match UserDB::from_csv(file) {
+                let out = match UserDB::from_csv(file) {
                     Ok(db) => {
-                        return db;
+                        db
                     }
                     Err(e) => {
-                        log::error!("error while reading users: {e}");
-                        return Default::default();
+                        log::error!("Error while reading users: {e}");
+                        Default::default()
                     }
-                }
+                };
+                log::debug!("Done reading users");
+                return out;
             }
         }
         Default::default()
     }
 
-    /// Read a comma separated list
+    /// Read a comma separated list of username,password_hash (no space between!)
     pub fn from_csv(file: fs::File) -> io::Result<Self> {
         let mut fid = io::BufReader::new(file);
         let mut line = "".to_string();
@@ -90,22 +83,18 @@ impl UserDB {
             fid.read_line(&mut line)? > 0
         } {
             // line contains trailing \n, so ignore that.
-            let Some((username, password)) = line[..(line.len()-1)].split_once(",") else {
+            let Some((username, hash)) = line.trim_end_matches('\n').split_once(",") else {
                 return Err(io::Error::new(io::ErrorKind::InvalidData, format!("Missing ',' on line {idx}")));
             };
-            db.create_user(UserCredentials {
-                username: username.into(),
-                password: password.into(),
-            });
+            if let Err(e) = PasswordHash::new(&hash) {
+                log::error!("Invalid password hash for user \"{username}\". Failed to parse with error: {e}");
+                continue
+            }
+            if db.0.insert(username.into(), hash.into()).is_some() {
+                log::warn!("User already exists! ({})", username);
+            }
         }
         Ok(db)
-    }
-
-    pub fn create_user(&mut self, user: UserCredentials) {
-        let hash = user.password_hash();
-        if self.0.insert(user.username.clone(), hash).is_some() {
-            log::warn!("User already exists! ({})", user.username);
-        }
     }
 
     pub fn validate_user(&self, user: &UserCredentials) -> bool {
@@ -116,10 +105,11 @@ impl UserDB {
         let parsed_hash = match PasswordHash::new(&hash) {
             Ok(h) => h,
             Err(e) => {
-                log::warn!("Failed to hash password for user \"{}\": {e}", user.username);
+                log::warn!("Failed to parse password hash for user \"{}\". This should never happen! Error was: {e}", user.username);
                 return false
             }
         };
+        log::debug!("Hash is {hash}");
         Argon2::default()
             .verify_password(user.password.as_str().as_bytes(), &parsed_hash)
             .is_ok()
