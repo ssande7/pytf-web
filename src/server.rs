@@ -120,13 +120,13 @@ async fn molecules(_user: Identity) -> impl Responder {
 async fn main() -> std::io::Result<()> {
     env_logger::init();
 
-    let (server, redis) = match parse_args() {
+    let Some((server, redis)) = (match parse_args() {
         Ok(addr) => addr,
         Err(e) => {
             return Err(Error::new(ErrorKind::InvalidInput,
                 format!("Error parsing command line arguments: {e}")));
         }
-    };
+    }) else { return Ok(()) };
 
 
     let secret_key = Key::generate();

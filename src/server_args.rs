@@ -14,7 +14,7 @@ pub struct Connection {
 
 /// Parse command line arguments for the server to set relevant globals
 /// Returns connection details for the server and the redis server (in that order)
-pub fn parse_args() -> anyhow::Result<(Connection, Connection)> {
+pub fn parse_args() -> anyhow::Result<Option<(Connection, Connection)>> {
     let mut args = std::env::args().skip(1).peekable();
     let mut mols_file = None;
     let mut users_file = None;
@@ -62,6 +62,10 @@ pub fn parse_args() -> anyhow::Result<(Connection, Connection)> {
                 };
                 redis_address.port = port.parse()?;
             }
+            "-h" | "--help" => {
+                println!("{HELP_MSG}");
+                return Ok(None);
+            }
             _ => {
                 Err(Error::new(
                     ErrorKind::InvalidInput,
@@ -91,6 +95,29 @@ pub fn parse_args() -> anyhow::Result<(Connection, Connection)> {
         }
     });
 
-    Ok((address, redis_address))
+    Ok(Some((address, redis_address)))
 }
+
+const HELP_MSG: &str = "
+USAGE: pytf-server [OPTIONS]
+
+  OPTION          ARG       DESCRIPTION
+
+  -u/--users      <file>    File containing usernames and password hashes, one per line,
+                            separated by a comma. Can be generated from plaintext .csv using
+                            the included pytf-hash-users tool.
+
+  -m/--molecules  <file>    JSON file containing the available molecules. See docs for details.
+                            Defaults to [RESOURCES_DIR]/name_map.json
+
+  -ip             <IP>      IP address of server. Defaults to 127.0.0.1
+
+  --port          <PORT>    Port for the server to listen on. Defaults to 8080
+
+  --redis-ip      <IP>      IP address of the Redis server. Defaults to 127.0.0.1
+
+  --redis-port    <PORT>    Port of the Redis server. Defaults to 6379
+
+  -h/--help                 Show this message and exit.
+";
 
