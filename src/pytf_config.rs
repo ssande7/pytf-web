@@ -33,8 +33,7 @@ impl MoleculeResources {
         let mut molecules: MoleculeResources =
             serde_json::from_str(&std::fs::read_to_string(&file)?)?;
         log::debug!("Beginning parsing .pdb files");
-        let mut path = PathBuf::from(RESOURCES_DIR);
-        path.push("molecules");
+        let path = RESOURCES_DIR.get().unwrap().join("molecules");
         for mol in molecules.molecules.iter_mut() {
             mol.atoms = Some({
                 pdb2xyz(path.join(format!("{}.pdb", mol.res_name)))
@@ -46,12 +45,18 @@ impl MoleculeResources {
     }
 }
 
-// TODO: Make this configurable
-pub const RESOURCES_DIR: &str = "resources";
+/// Working directory to store PyThinFilm data
+pub static WORK_DIR: OnceLock<PathBuf> = OnceLock::new();
+/// Resources directory containing config files and molecules directory with .pdb and .itp files
+pub static RESOURCES_DIR: OnceLock<PathBuf> = OnceLock::new();
+/// Molecules available for deposition.
+/// Parsed from JSON and filled with molecule 3D structure from .pdb file.
 pub static AVAILABLE_MOLECULES: OnceLock<MoleculeResources> = OnceLock::new();
+
+// TODO: Make this configurable
 pub const INSERTIONS_PER_RUN: usize = 4;
 pub const DEPOSITION_STEPS:   usize = 36;
-pub const TARGET_ATOMS_TOTAL: usize = 1300;
+// pub const TARGET_ATOMS_TOTAL: usize = 1300;
 pub const INSERT_DISTANCE:  f32 = 2f32;
 pub const RUN_TIME_MINIMUM: f32 = 18f32;
 pub const DEFAULT_DEPOSITION_VELOCITY: f32 = 0.35;
@@ -77,6 +82,21 @@ pub struct PytfConfig {
 impl PytfConfig {
     pub fn archive_name(&self) -> String {
         format!("{}.archive", self.name)
+    }
+
+    /// Set the working directory to be a sub-directory with the
+    /// same name as the job's name under the global `WORK_DIR` directory.
+    /// If successful, returns `Some(self)` with the modified `work_directory` member.
+    ///
+    /// # Errors
+    /// Returns `None` if the full working directory is not valid UTF-8.
+    ///
+    /// # Panics
+    /// If `WORK_DIR` has not been set.
+    pub fn set_work_dir(mut self) -> Option<Self> {
+        self.work_directory = WORK_DIR.get().unwrap().join(&self.name)
+        .to_str()?.to_owned();
+        Some(self)
     }
 }
 
@@ -134,10 +154,9 @@ impl From<PytfConfigMinimal> for PytfConfig {
         for mol in &config.mixture {
             name.push_str(&format!("_{}-{:x}", mol.res_name, mol.ratio));
         }
-        let work_directory = format!("work_{name}"); // TODO: Pass in work directory root and use here
         Self {
             name,
-            work_directory,
+            work_directory: "".into(), // Placeholder work_directory to be filled by worker
             n_cycles,
             run_time,
             deposition_velocity: config.deposition_velocity,
@@ -193,8 +212,11 @@ pub struct MixtureComponent {
 
 impl MixtureComponent {
     fn fill_fields(&mut self) {
-        self.pdb_file = Some(format!("{RESOURCES_DIR}/molecules/{}.pdb", &self.res_name));
-        self.itp_file = Some(format!("{RESOURCES_DIR}/molecules/{}.itp", &self.res_name));
+        let mut path = RESOURCES_DIR.get().unwrap().join("molecules");
+        self.pdb_file = Some(path.join(format!("{}.pdb", &self.res_name))
+            .to_str().expect("Non UTF-8 file path!").to_owned());
+        path.push(format!("{}.itp", &self.res_name));
+        self.itp_file = Some(path.to_str().expect("Non UTF-8 file path!").to_owned());
     }
 }
 

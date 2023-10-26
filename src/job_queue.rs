@@ -1,5 +1,5 @@
 use std::{
-    sync::{Arc, RwLock, atomic::{AtomicBool, Ordering}},
+    sync::{Arc, RwLock, atomic::{AtomicBool, Ordering}, OnceLock},
     collections::HashMap,
     time::{Duration, Instant},
     io::{BufReader, BufWriter, Read, Write}, path::PathBuf, fmt::Display
@@ -23,8 +23,7 @@ const JOB_CLEANUP_INTERVAL: Duration = Duration::from_secs(150);
 const MAX_JOB_AGE: Duration = Duration::from_secs(300);
 
 /// Directory to store archived jobs.
-/// TODO: make this configurable
-const ARCHIVE_DIR: &str = "./job_archive";
+pub static ARCHIVE_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 // Client
 #[derive(Message)]
@@ -112,8 +111,8 @@ pub struct JobServer {
 
 impl JobServer {
     pub fn new() -> Self {
-        if let Err(e) = std::fs::create_dir_all(format!("{ARCHIVE_DIR}")) {
-            log::warn!("Failed to create archive directory \"{ARCHIVE_DIR}\" with error \"{e}\". Old jobs will not be archived!");
+        if let Err(e) = std::fs::create_dir_all(ARCHIVE_DIR.get().unwrap()) {
+            log::warn!("Failed to create archive directory with error \"{e}\". Old jobs will not be archived!");
         }
         let mut job_lookup = HashMap::with_capacity(128);
         let null_job = JobInner::new(PytfConfig::default());
@@ -469,7 +468,7 @@ impl JobInner {
     /// Create a new job. Will attempt to load from archive on disk,
     /// or create a new job with the Waiting status if loading fails
     pub fn new(config: PytfConfig) -> Self {
-        if PathBuf::from(ARCHIVE_DIR).join(config.archive_name()).is_file() {
+        if ARCHIVE_DIR.get().unwrap().join(config.archive_name()).is_file() {
              match Self::load(config.clone()) {
                 Ok(job) => {
                     if job.status == JobStatus::Finished {
@@ -598,7 +597,7 @@ impl JobInner {
             .write(true)
             .create(true)
             .truncate(true)
-            .open(PathBuf::from(ARCHIVE_DIR).join(self.config.archive_name()))?;
+            .open(ARCHIVE_DIR.get().unwrap().join(self.config.archive_name()))?;
         let mut fid = BufWriter::new(fid);
         // No need to write config, since we only need to open the file again if we get another
         // (matching) config that leads to it.
@@ -635,7 +634,7 @@ impl JobInner {
     pub fn load(config: PytfConfig) -> std::io::Result<Self> {
         let fid = std::fs::OpenOptions::new()
             .read(true)
-            .open(PathBuf::from(ARCHIVE_DIR).join(config.archive_name()))?;
+            .open(ARCHIVE_DIR.get().unwrap().join(config.archive_name()))?;
         let mut fid = BufReader::new(fid);
 
         let pause_bytes = read_le_usize(&mut fid)?;

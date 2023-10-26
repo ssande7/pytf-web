@@ -8,7 +8,7 @@ use crate::{
     pytf::*,
     pytf_config::{PytfConfig, RESOURCES_DIR},
     worker_client::{
-        PytfServer, WsMessage,
+        PytfWorker, WsMessage,
         PAUSE_HEADER, FAILED_HEADER, DONE_HEADER
     },
     pytf_frame::{SegmentProcessor, SegToProcess, NewSocket}
@@ -30,7 +30,7 @@ use crate::{
 pub struct PytfRunner {
     pytf: Pytf,
     config: PytfConfig,
-    socket: Addr<PytfServer>,
+    socket: Addr<PytfWorker>,
     segment_proc: Addr<SegmentProcessor>,
 }
 
@@ -204,7 +204,7 @@ impl PytfRunner {
     /// Set up an actor with a `Pytf` python instance ready to run a simulation
     pub fn new(
         config: PytfConfig,
-        socket: Addr<PytfServer>,
+        socket: Addr<PytfWorker>,
         segment_proc: Addr<SegmentProcessor>,
         resuming: bool
     ) -> anyhow::Result<Self> {
@@ -220,13 +220,13 @@ impl PytfRunner {
                     log::warn!("Failed to remove old working directory {}: {e}", config.work_directory);
                 }
             }
-            std::fs::create_dir(&config_yml)?;
+            std::fs::create_dir_all(&config_yml)?;
         }
 
         // Create config.yml in working directory if it doesn't already exist
         config_yml.push("config.yml");
         if !config_yml.is_file() {
-            std::fs::copy(PathBuf::from(RESOURCES_DIR).join("base_config.yml"), &config_yml)?;
+            std::fs::copy(RESOURCES_DIR.get().unwrap().join("base_config.yml"), &config_yml)?;
 
             // Write config.yml to jobname directory
             let mut config_file = std::fs::OpenOptions::new()

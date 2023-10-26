@@ -13,7 +13,7 @@ use awc::ws;
 use xdrfile::{XDRFile, access_mode};
 
 use crate::{
-    worker_client::{PytfServer, SEGMENT_HEADER, WsMessage},
+    worker_client::{PytfWorker, SEGMENT_HEADER, WsMessage},
     pytf::PytfFile
 };
 
@@ -28,7 +28,7 @@ pub const WS_FRAME_SIZE_LIMIT: usize = 25*1024*1024;
 /// - {segment_id: u32}
 /// - {num_frames: u32}
 /// - {num_particles: u32}
-/// - [num_particles x {particle_type: u8}]
+/// - [num_particles x {atomic_number: u8}]
 /// - [num_frames x [num_particles x {x: f32}{y: f32}{z: f32}]]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrajectorySegment {
@@ -38,6 +38,8 @@ pub struct TrajectorySegment {
 pub struct AtomNameMap {
     pub map: HashMap<&'static str, u8>,
 }
+
+/// Hash map for 1- or 2-letter atom names (upper case) to u8 atomic number
 pub static ATOM_NAME_MAP: OnceLock<AtomNameMap> = OnceLock::new();
 impl AtomNameMap {
     pub fn create() -> Self {
@@ -142,7 +144,7 @@ impl SegToProcess {
 
 #[derive(Debug)]
 pub struct SegmentProcessor {
-    socket: Addr<PytfServer>
+    socket: Addr<PytfWorker>
 }
 
 impl Actor for SegmentProcessor {
@@ -150,7 +152,7 @@ impl Actor for SegmentProcessor {
 }
 
 impl SegmentProcessor {
-    pub fn new(socket: Addr<PytfServer>) -> Self {
+    pub fn new(socket: Addr<PytfWorker>) -> Self {
         Self { socket }
     }
 }
@@ -191,7 +193,7 @@ impl Handler<SegToProcess> for SegmentProcessor {
 #[derive(Message)]
 #[rtype(result="()")]
 pub struct NewSocket {
-    pub addr: Addr<PytfServer>,
+    pub addr: Addr<PytfWorker>,
 }
 
 impl Handler<NewSocket> for SegmentProcessor {

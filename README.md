@@ -52,15 +52,22 @@ pytf-web is designed around a single server which handles a job queue, and some
 number of workers connected via web sockets.
 
 ### Server
-Currently, the server runs on port 8080, and expects to be behind something like nginx.
-Configuration of port and connection details may become available in future.
+By default, the server runs on port 8080, and expects to be behind something like nginx.
+Run `pytf-server` with the `-h` or `--help` flag to see configuration options.
+
+The server requires access to a `resources` directory (structured as the
+default provided in this repository) and to an `archive` directory for storing
+old inactive jobs. Both of these can be configured with the `--resources` and
+`--archive` flags.
+
+For login details, a file containing comma-separated (with no whitespace)
+usernames and argon2 password hashes, one per line, is required via the `--users` flag.
+This should include an entry the special "worker" user, and can be generated with
+the provided `pytf-hash-users` tool.
 
 To remember user sessions, the server uses Redis, so it requires `redis-server`
-to be running.
-It also takes an input argument for a list of usernames and passwords,
-including the special "worker" user.
-It is assumed that user accounts only persist for the duration of a workshop, and
-that passwords will be changed between workshops.
+to be running. The address and port of the Redis server can be configured on
+the command line via the `--redis-ip` and `--redis-port` arguments.
 
 To start the server, including Redis:
 ```
@@ -72,6 +79,6 @@ To run a worker node:
 ```
 $ ./run_worker.sh ${server_address} ${worker_key}
 ```
-Currently, workers assume that the server is already available, and will fail to connect
-if it is not (even if it comes online later).
-This may be changed in future to allow polling of the server if it can't be found.
+If the server is unavailable when a worker is started, or becomes unavailable
+later, workers will periodically attempt to reconnect.
+

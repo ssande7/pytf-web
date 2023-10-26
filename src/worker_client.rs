@@ -1,4 +1,8 @@
-use std::{time::{Instant, Duration}, ops::{DerefMut, Deref}, sync::{Mutex, Arc, Condvar}};
+use std::{
+    time::{Instant, Duration},
+    ops::{DerefMut, Deref},
+    sync::{Mutex, Arc, Condvar, atomic::{AtomicBool, Ordering}}
+};
 
 use actix::{prelude::*, io::{SinkWrite, WriteHandler}};
 use actix_codec::Framed;
@@ -37,13 +41,14 @@ pub const RESUME_HEADER:  &[u8] = b"resume\0";
 type WsFramedSink = SplitSink<Framed<BoxedSocket, ws::Codec>, ws::Message>;
 type WsFramedStream = SplitStream<Framed<BoxedSocket, ws::Codec>>;
 
-pub struct PytfServer {
+pub struct PytfWorker {
     server_addr: String,
     key: String,
     socket_sink: SinkWrite<ws::Message, WsFramedSink>,
     heartbeat: Instant,
     worker: Option<Addr<PytfRunner>>,
     segment_proc: Addr<SegmentProcessor>,
+    running: Arc<AtomicBool>,
 }
 
 async fn open_ws_connection(server_addr: String, key: String) -> anyhow::Result<(WsFramedSink, WsFramedStream)> {
@@ -96,10 +101,10 @@ async fn delay_and_reconnect(server_addr: String, key: String) -> (WsFramedSink,
 }
 
 
-impl PytfServer {
+impl PytfWorker {
     /// Initialise a web socket client. Waits and attempts reconnection
     /// if client initialisation fails or the server can't return a test ping.
-    pub async fn connect(server_addr: String, key: String) -> Addr<Self> {
+    pub async fn connect(server_addr: String, key: String, running: Arc<AtomicBool>) -> Addr<Self> {
         let (sink, stream) = match open_ws_connection(server_addr.clone(), key.clone()).await {
             Ok(connection) => connection,
             Err(e) => {
@@ -118,6 +123,7 @@ impl PytfServer {
                 segment_proc: spawn_on_arbiter(async move {
                     SegmentProcessor::new(addr).start()
                 }).expect("Failed to spawn segment processor thread"),
+                running,
             }
         })
     }
@@ -216,7 +222,7 @@ impl DerefMut for WsMessage {
     }
 }
 
-impl Handler<WsMessage> for PytfServer {
+impl Handler<WsMessage> for PytfWorker {
     type Result = ();
     fn handle(&mut self, msg: WsMessage, _ctx: &mut Self::Context) -> Self::Result {
         if let Err(e) = self.socket_sink.write(msg.0) {
@@ -233,9 +239,9 @@ impl Handler<WsMessage> for PytfServer {
     }
 }
 
-impl WriteHandler<WsProtocolError> for PytfServer {}
+impl WriteHandler<WsProtocolError> for PytfWorker {}
 
-impl StreamHandler<Result<ws::Frame, awc::error::WsProtocolError>> for PytfServer {
+impl StreamHandler<Result<ws::Frame, awc::error::WsProtocolError>> for PytfWorker {
     fn handle(&mut self, msg: Result<ws::Frame, awc::error::WsProtocolError>, ctx: &mut Self::Context) {
         let msg = match msg {
             Err(e) => {
@@ -258,8 +264,14 @@ impl StreamHandler<Result<ws::Frame, awc::error::WsProtocolError>> for PytfServe
                         }
                     };
                     log::debug!("Config string: {config}");
-                    let config: PytfConfig = match serde_json::from_str(config) {
-                        Ok(config) => config,
+                    let config = match serde_json::from_str::<PytfConfig>(config) {
+                        Ok(config) => {
+                            let Some(config) = config.set_work_dir() else {
+                                log::error!("Invalid UTF-8 for working directory");
+                                return
+                            };
+                            config
+                        }
                         Err(e) => {
                             log::error!("Failed to deserialize config for new job: {e}");
                             return
@@ -302,8 +314,14 @@ impl StreamHandler<Result<ws::Frame, awc::error::WsProtocolError>> for PytfServe
                             return
                         }
                     };
-                    let config: PytfConfig = match serde_json::from_str(&config) {
-                        Ok(config) => config,
+                    let config = match serde_json::from_str::<PytfConfig>(&config) {
+                        Ok(config) => {
+                            let Some(config) = config.set_work_dir() else {
+                                log::error!("Invalid UTF-8 for working directory");
+                                return
+                            };
+                            config
+                        }
                         Err(e) => {
                             log::error!("Failed to deserialize config for job to resume: {e}");
                             return
@@ -352,7 +370,7 @@ impl StreamHandler<Result<ws::Frame, awc::error::WsProtocolError>> for PytfServe
     }
 }
 
-impl Actor for PytfServer {
+impl Actor for PytfWorker {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
@@ -362,7 +380,7 @@ impl Actor for PytfServer {
 
     /// Connection to main server is shutting down
     fn stopping(&mut self, ctx: &mut Self::Context) -> Running {
-        if !self.socket_sink.closed() {
+        if !self.socket_sink.closed() && self.running.load(Ordering::SeqCst) {
             log::debug!("Setting up reconnection");
             self.socket_sink.close();
             delay_and_reconnect(self.server_addr.clone(), self.key.clone())
@@ -382,6 +400,7 @@ impl Actor for PytfServer {
                                 heartbeat: Instant::now(),
                                 worker: worker.clone(),
                                 segment_proc: act.segment_proc.clone(),
+                                running: act.running.clone(),
                             }
                         });
                     if let Some(worker) = &worker {
