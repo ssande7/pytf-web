@@ -65,7 +65,7 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
     if (last_message === null) return;
     setLastMessage(null);
     if (!running) {
-      console.log("Unexpected message while not running");
+      // console.log("Unexpected message while not running");
       return;
     }
     if (last_message.data instanceof Blob) {
@@ -172,7 +172,9 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
 
   const [status_text, setStatusText] = useState("Idle");
   useEffect(() => {
-    if (submit_waiting) {
+    if (!socket_connected) {
+      setStatusText("Disconnected! Try refreshing the page.");
+    } else if (submit_waiting) {
       setStatusText("Submitting");
     } else if (failed) {
       setStatusText("Failed!");
@@ -191,7 +193,7 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
     } else {
       setStatusText("Idle");
     }
-  }, [submit_waiting, failed, running, latest_segment, num_segments, roughness_ready]);
+  }, [submit_waiting, failed, running, latest_segment, num_segments, roughness_ready, socket_connected]);
 
   const tabs = [
     {
