@@ -11,8 +11,10 @@ use std::{
     path::Path,
 };
 
+/// Database of usernames and associated password hashes
 pub static USER_DB: OnceLock<UserDB> = OnceLock::new();
 
+/// Login token (username) to send back to client
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoginToken {
     token: String,
@@ -23,6 +25,7 @@ impl From<String> for LoginToken {
     }
 }
 
+/// Login credentials to be validated
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct UserCredentials {
     pub username: String,
@@ -35,10 +38,13 @@ impl UserCredentials {
     }
 }
 
+/// Database of usernames and associated password hashes.
 #[derive(Debug, Default)]
 pub struct UserDB(HashMap<String, String>);
 
 impl UserDB {
+    /// Load the users database from the specified file.
+    /// File should contain lines of username,argon2_password_hash (no space between!)
     pub fn load(fname: impl AsRef<Path>) -> std::io::Result<Self> {
         log::debug!("Reading users from {}", fname.as_ref().to_string_lossy());
         let out = UserDB::from_csv(fs::File::open(fname)?)?;
@@ -46,7 +52,7 @@ impl UserDB {
         Ok(out)
     }
 
-    /// Read a comma separated list of username,password_hash (no space between!)
+    /// Read a comma separated list of username,argon2_password_hash (no space between!)
     pub fn from_csv(file: fs::File) -> io::Result<Self> {
         let mut fid = io::BufReader::new(file);
         let mut line = "".to_string();
@@ -72,6 +78,8 @@ impl UserDB {
         Ok(db)
     }
 
+    /// Check the provided credentials against the database and return true if a match is found
+    /// and the password is correct.
     pub fn validate_user(&self, user: &UserCredentials) -> bool {
         let Some(hash) = self.0.get(&user.username) else {
             log::info!("Received login request for unknown user \"{}\"", user.username);
@@ -84,7 +92,6 @@ impl UserDB {
                 return false
             }
         };
-        log::debug!("Hash is {hash}");
         Argon2::default()
             .verify_password(user.password.as_str().as_bytes(), &parsed_hash)
             .is_ok()
