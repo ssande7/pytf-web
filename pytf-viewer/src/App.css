@@ -436,6 +436,24 @@ input:checked + .slider:before {
   cursor: default;
 }
 
+.icon-button-toggled {
+  flex: 0;
+  padding: 0;
+  color: #444;
+  background: white;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  text-align: center;
+  align-items: center;
+  justify-content: center;
+  transition: 100ms all ease;
+  border-radius: 3pt;
+}
+.icon-button-toggled:hover {
+  background: #bbb;
+}
+
 .header {
   float: right;
   margin-left: auto;

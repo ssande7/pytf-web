@@ -1,11 +1,12 @@
 import { Particles, Visualizer, AtomTypes } from 'omovi'
-import { Vector3, Color, Mesh, BufferGeometry, BufferAttribute, MeshBasicMaterial } from 'three'
+import { Vector3, Color, Mesh, BufferGeometry, BufferAttribute, MeshBasicMaterial, Line, LineBasicMaterial } from 'three'
 import React, { useEffect, useState, useRef } from 'react';
 import RepeatIcon from '@mui/icons-material/Repeat';
 import RepeatOnIcon from '@mui/icons-material/RepeatOn';
 import SpeedIcon from '@mui/icons-material/Speed';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
+import StraightenIcon from '@mui/icons-material/Straighten';
 
 // Box size in nm, from graphene substrate .pdb file, accounting for rotation mapping x,y,z -> y,z,x.
 // TODO: have the server send this info
@@ -94,11 +95,12 @@ const Visualiser: React.FC<IVisualiser> = ({
   const [vis, setVis] = useState<Visualizer | null>(null);
   const [loadingVis, setLoadingVis] = useState(false);
   const domElement = useRef<HTMLDivElement | null>(null);
-  const camPositionInit = new Vector3( 6.2,  3, -2.5);
-  const camTargetInit   = new Vector3( 2,  1.5,  2);
+  const camPositionInit = new Vector3( -2.4,  3, -2.7);
+  const camTargetInit   = new Vector3( 2,  1.2,  2);
   const [frame, setFrame] = useState(0);
   const [paused, setPaused] = useState(false);
   const [loop, setLoop] = useState(false);
+  const [rulers, setRulers] = useState(true);
 
   // Viewport creation
   useEffect(() => {
@@ -215,7 +217,8 @@ const Visualiser: React.FC<IVisualiser> = ({
     }
     setHeightMapDisp(height_map_disp);
     // Deliberately not reacting on num_bins change
-  }, [height_map, show_height_map, height_map_disp, mean_height, roughness, setHeightMapDisp, particles, setFrame, setLoop]);
+  }, [height_map, show_height_map, height_map_disp, mean_height,
+      roughness, setHeightMapDisp, particles, setFrame, setLoop, vis]);
 
   // Jump to final frame and disable looping
   // if we just calculated a height map
@@ -255,6 +258,82 @@ const Visualiser: React.FC<IVisualiser> = ({
       animationSlider.current.value = String(frame)
     }
   }, [frame])
+
+  // Draw rulers
+  const [rulerObj, setRulerObj] = useState<Array<Line>>([]);
+  const rulerObjRef = useRef(rulerObj)
+  useEffect(() => {
+    rulerObjRef.current = rulerObj;
+  }, [rulerObj])
+  const prevRulerObj = rulerObjRef.current;
+
+  useEffect(() => {
+    if (!vis) { return }
+    if (!rulers || particles.length === 0) {
+      setRulerObj([]);
+
+    } else {
+      let pos = particles[0].getPosition(0);
+      let xlo = pos.x, zlo = pos.z, xhi = pos.x, zhi = pos.z, ylo = pos.y;
+      for (let i = 1; i < particles[0].count; i++) {
+        pos = particles[0].getPosition(i);
+        xlo = Math.min(xlo, pos.x);
+        xhi = Math.max(xhi, pos.x);
+        zlo = Math.min(zlo, pos.z);
+        zhi = Math.max(zhi, pos.z);
+        ylo = Math.min(ylo, pos.y);
+      }
+      const off_x = (Lx - (xhi - xlo)) / 2;
+      const off_z = (Lz - (zhi - zlo)) / 2;
+
+      const points_x = [];
+      points_x.push( new Vector3(xlo - off_x, ylo - 0.15, zlo - 0.65) );
+      points_x.push( new Vector3(xlo - off_x, ylo,        zlo - 0.5) );
+      for (let x = 1; x < Lx; x++) {
+        points_x.push( new Vector3(xlo - off_x + x, ylo,  zlo - 0.5) );
+        points_x.push( new Vector3(xlo - off_x + x, ylo - (x % 10 ? 0.125 : 0.1), zlo - (x % 10 ? 0.625 : 0.6)) );
+        points_x.push( new Vector3(xlo - off_x + x, ylo,  zlo - 0.5) );
+      }
+      points_x.push( new Vector3(xhi + off_x, ylo,        zlo - 0.5) );
+      points_x.push( new Vector3(xhi + off_x, ylo - 0.15, zlo - 0.65) );
+
+      const points_z = [];
+      points_z.push( new Vector3(xlo - 0.65, ylo - 0.15, zlo - off_z) );
+      points_z.push( new Vector3(xlo - 0.5,  ylo,        zlo - off_z) );
+      for (let z = 1; z < Lz; z++) {
+        points_z.push( new Vector3(xlo - 0.5, ylo,       zlo - off_z + z) );
+        points_z.push( new Vector3(xlo - (z % 10 ? 0.625 : 0.6), ylo - (z % 10 ? 0.125 : 0.1), zlo - off_z + z) );
+        points_z.push( new Vector3(xlo - 0.5, ylo,       zlo - off_z + z) );
+      }
+      points_z.push( new Vector3(xlo - 0.5,  ylo,        zhi + off_z) );
+      points_z.push( new Vector3(xlo - 0.65, ylo - 0.15, zhi + off_z) );
+
+      const geom_x = new BufferGeometry().setFromPoints(points_x);
+      const geom_z = new BufferGeometry().setFromPoints(points_z);
+      const material = new LineBasicMaterial({ color: 0xffffff });
+      setRulerObj([
+        new Line(geom_x, material),
+        new Line(geom_z, material)
+      ]);
+    }
+
+  }, [rulers, particles, particles.length, vis])
+
+  useEffect(() => {
+    if (!vis) { return }
+    if (rulerObj !== prevRulerObj) {
+      if (prevRulerObj) {
+        for (let i = 0; i < prevRulerObj.length; i++) {
+          vis.scene.remove(prevRulerObj[i]);
+        }
+      }
+      if (rulerObj) {
+        for (let i = 0; i < rulerObj.length; i++) {
+          vis.scene.add(rulerObj[i]);
+        }
+      }
+    }
+  }, [vis, rulerObj])
 
   return (<>
     <div className="MD-vis" >
@@ -302,8 +381,17 @@ const Visualiser: React.FC<IVisualiser> = ({
             }
           }}
         />
+        <button className={ rulers ? "icon-button-toggled" : "icon-button"}
+          title="Toggle rulers"
+          style={{paddingLeft: '2pt', paddingRight: '2pt'}}
+          onClick={() => setRulers((prev) => !prev)}
+        >
+          {/* TODO: allow toggling */}
+          <StraightenIcon/>
+        </button>
         <button className="icon-button"
           title="Reset camera to initial position"
+          style={{marginLeft: '6pt'}}
           onClick={resetCamera}
         >
           <VisibilityOutlinedIcon/>
