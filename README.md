@@ -119,7 +119,9 @@ $ ./run_worker.sh ${server_ip} ${worker_key}
 If the server is unavailable when a worker is started, or becomes unavailable
 later, workers will periodically attempt to reconnect.
 
-Note that if the server is not running on the standard HTTP port, then the port
-must be specified along with the address
-(e.g. `./run_worker.sh '127.0.0.1:8080' P@ssw0rd!`).
+Note that if the server is not accessible via the standard HTTP port,
+then the port must be specified along with the address
+(e.g. `./run_worker.sh '127.0.0.1:8080' P@ssw0rd!`). If the server is proxied to
+the HTTP port by nginx (as in the example configuration above), then it is
+sufficient to just use the IP address of the nginx server.
 
