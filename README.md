@@ -72,11 +72,12 @@ and then adding an entry to the [`molecules.json`](resources/molecules.json) fil
 Make sure the `res_name` field matches the residue name of the molecule in the
 .pdb file, and that the files are named `${res_name}.pdb` and
 `${res_name}.itp`, otherwise they will not be found. The .pdb and .itp files must
-be present on all worker instances, and the .pdb is also required by the server to
-extract 3D molecule structure for display.
+be present on all worker instances, and the .pdb files are also required by the
+server to extract 3D molecule structure for display.
 For display of the 2D structure, the required SMILES string in
 [`molecules.json`](resources/molecules.json) can also be found on the ATB, or
-from various other sources. See existing molecules for examples.
+from various other sources.
+See the default molecules provided in this repository for examples.
 
 The [PyThinFilm configuration](atb-uq.github.io/PyThinFilm) can be modified by
 editing [`base_config.yml`](resources/base_config.yml). Note that some options
@@ -95,7 +96,7 @@ If it does exist, existing archived jobs within it will be used when possible.
 
 For login details, a file containing comma-separated (with no whitespace)
 usernames and argon2 password hashes, one per line, is required via the `--users` flag.
-This should include an entry the special "worker" user, and can be generated with
+This should include an entry for the special "worker" user, and can be generated with
 the provided `pytf-hash-users` tool from a similarly formatted file with
 plaintext passwords (see [`test_users.csv`](test_users.csv) for an example):
 ```
@@ -104,7 +105,8 @@ $ cargo run --release pytf-hash-users test_users.csv -o test_users.hashed
 
 To remember user sessions, the server uses Redis, so it requires `redis-server`
 to be running. The address and port of the Redis server can be configured on
-the command line via the `--redis-ip` and `--redis-port` arguments.
+the command line via the `--redis-ip` and `--redis-port` arguments, although the
+defaults should work if a standard Redis configuration is used.
 
 To start the server, including Redis:
 ```
