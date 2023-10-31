@@ -1,5 +1,5 @@
 import { Particles, Visualizer, AtomTypes } from 'omovi'
-import { Vector3, Color, Mesh, BufferGeometry, BufferAttribute, MeshBasicMaterial, Line, LineBasicMaterial } from 'three'
+import { Vector3, Color, Mesh, BufferGeometry, BufferAttribute, MeshBasicMaterial, Line, LineBasicMaterial, PerspectiveCamera } from 'three'
 import React, { useEffect, useState, useRef } from 'react';
 import RepeatIcon from '@mui/icons-material/Repeat';
 import RepeatOnIcon from '@mui/icons-material/RepeatOn';
@@ -12,6 +12,7 @@ import StraightenIcon from '@mui/icons-material/Straighten';
 // TODO: have the server send this info
 export const Lz = 4.2600 // x -> z
 export const Lx = 3.9352 // y -> x
+export const PS_PER_FRAME = 0.25 // Time between animation frames
 
 // Omovi atom types in periodic table order
 // Used to retrieve Omovi atom type from element number in data
@@ -73,6 +74,16 @@ function hsl2Color (h: number, s: number, l: number) {
     return new Color(r, g, b); // (x << 0) = Math.floor(x)
 };
 
+function dec_places(n: number) {
+  let n_str = n.toString();
+  if (n_str.indexOf('e-') > -1) {
+    let [_, exponent] = n_str.split('e-');
+    return parseInt(exponent, 10);
+  }
+  let idx = n_str.indexOf('.');
+  if (idx < 0) { return 0; }
+  return n_str.length - idx - 1;
+}
 
 interface IVisualiser {
   particles: Array<Particles>,
@@ -101,6 +112,7 @@ const Visualiser: React.FC<IVisualiser> = ({
   const [paused, setPaused] = useState(false);
   const [loop, setLoop] = useState(false);
   const [rulers, setRulers] = useState(true);
+  const TIME_DEC_PLACES = dec_places(PS_PER_FRAME);
 
   // Viewport creation
   useEffect(() => {
@@ -339,10 +351,19 @@ const Visualiser: React.FC<IVisualiser> = ({
     <div className="MD-vis" >
       <div
         style={{
-          height: '400pt', minHeight: '200pt', maxHeight: '80vh',
-          backgroundColor: '0x333'
+          height: 'calc(min(65vh, 50vw))', minHeight: '200pt', maxHeight: '50vw',
+          backgroundColor: '0x333', position: 'relative',
         }}
-        ref={domElement}>
+        ref={domElement}
+      >
+        <div style={{
+          color: 'white', userSelect: 'none',
+          WebkitUserSelect: 'none', msUserSelect: 'none',
+          zIndex: 10, position: 'absolute',
+          bottom: '3pt', left: '7pt', fontFamily: 'monospace'
+        }}>
+          {vis === null ? '' : (frameRef.current * PS_PER_FRAME).toFixed(TIME_DEC_PLACES) + ' ps'}
+        </div>
       </div>
       <div className="MD-vis-controls">
         <div className="icon-button">
@@ -386,7 +407,6 @@ const Visualiser: React.FC<IVisualiser> = ({
           style={{paddingLeft: '2pt', paddingRight: '2pt'}}
           onClick={() => setRulers((prev) => !prev)}
         >
-          {/* TODO: allow toggling */}
           <StraightenIcon/>
         </button>
         <button className="icon-button"
@@ -396,12 +416,25 @@ const Visualiser: React.FC<IVisualiser> = ({
         >
           <VisibilityOutlinedIcon/>
         </button>
-        <button className="icon-button"
-          title="Save deposition movie"
+        {/*<button className="icon-button"
+          title="Save a screenshot"
           style={{marginLeft: '6pt'}}
+          onClick={() => {
+            if (!vis) { return }
+            const vis_size = vis.renderer.getSize();
+            const aspect = vis_size.width / vis_size.height;
+            let cam = new PerspectiveCamera(60, aspect, 0.1, 10000);
+            const p = vis.getCameraPosition();
+            cam.position.set(p.x, p.y, p.z);
+            cam.lookAt(vis.getCameraTarget());
+            // THIS DOESN'T SEEM TO WORK! Just gives black image...
+            // Maybe renderer needs to use preserveDrawingBuffer: true?
+            vis.renderer.getScreenshot(vis.scene, cam, 1920, 1920/aspect)
+              .then((img) => window.open(img));
+          }}
         >
           <SaveOutlinedIcon/>
-        </button>
+        </button>*/}
       </div>
     </div>
     <div style={{color: 'white'}}>

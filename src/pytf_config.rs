@@ -56,6 +56,7 @@ pub static AVAILABLE_MOLECULES: OnceLock<MoleculeResources> = OnceLock::new();
 // TODO: Make this configurable
 pub const INSERTIONS_PER_RUN: usize = 4;
 pub const DEPOSITION_STEPS:   usize = 36;
+pub const PS_PER_FRAME: f32 = 100. * 0.0025; // nstout * dt
 // pub const TARGET_ATOMS_TOTAL: usize = 1300;
 pub const INSERT_DISTANCE:  f32 = 2f32;
 pub const RUN_TIME_MINIMUM: f32 = 18f32;
@@ -146,6 +147,8 @@ impl From<PytfConfigMinimal> for PytfConfig {
         // } else { 1f32 };
         let n_cycles = DEPOSITION_STEPS; //(TARGET_ATOMS_TOTAL as f32 / atoms_per_step).ceil() as usize;
         let run_time = (INSERT_DISTANCE / config.deposition_velocity) + RUN_TIME_MINIMUM;
+        // Avoid weird steps in time between trajectory frames
+        let run_time = (run_time / PS_PER_FRAME).ceil() * PS_PER_FRAME;
         let mut name = String::with_capacity(config.mixture.len()*15+10);
         name.push_str(&format!("{:.1}_{:.2}", run_time, config.deposition_velocity));
 

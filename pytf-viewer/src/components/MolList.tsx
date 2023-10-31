@@ -59,11 +59,11 @@ const MolList: React.FC<IMolList> =
             config.mixture.length === molecules.length ?
               composition.map((i) => {
                 return (
-                  <div className="molecule-tile" style={{background: '#eee', color: 'black'}}>
+                  <div className="molecule-tile" style={{background: '#eee', color: 'black', position: 'relative'}}>
                     <button
                       title="Remove"
                       className="icon-button inverted header corner-button hover-red"
-                      style={{position: 'relative', zIndex: 2}}
+                      style={{position: 'absolute', top: '3pt', right: '3pt', zIndex: 2}}
                       disabled={running}
                       onClick={() => {
                         update_ratio(i, 0);
@@ -74,7 +74,7 @@ const MolList: React.FC<IMolList> =
                     </button>
                     <button
                       className="icon-button inverted header corner-button hover-blue"
-                      style={{float: 'left', position: 'relative', zIndex: 2}}
+                      style={{position: 'absolute', top: '3pt', left: '3pt', zIndex: 2}}
                       onClick={() => {
                         setShowMolecule2d(molecules[i]);
                       }}
@@ -141,7 +141,7 @@ const MolList: React.FC<IMolList> =
                 : (
                   <div
                     className="molecule-tile molecule-tile-clickable"
-                    style={{background: '#eee', color: 'black'}}
+                    style={{background: '#eee', color: 'black', position: 'relative'}}
                     onClick={() => {
                       setPickMol(false);
                       update_ratio(i, 1);
@@ -151,7 +151,7 @@ const MolList: React.FC<IMolList> =
                   >
                     <button
                       className="icon-button inverted header corner-button hover-blue"
-                      style={{float: 'left', position: 'relative', zIndex: 2}}
+                      style={{position: 'absolute', top: '3pt', left: '3pt', zIndex: 2}}
                       onClick={(e) => {
                         setShowMolecule2d(molecules[i]);
                         e.stopPropagation();

@@ -3,8 +3,9 @@
   flex-direction: column;
   align-items: stretch;
   justify-items: flex-start;
-  background-color: #222; /*#282c34;*/
+  background-color: #222;
   height: 100vh;
+  width: 100vw;
 }
 
 .App-logo {
@@ -66,6 +67,7 @@
   background-color: #222;
   gap: 10pt;
   flex-grow: 1;
+  width: 100%;
 }
 
 .tab-container {
@@ -73,6 +75,7 @@
   display: grid;
   grid-template-columns: 9em 1fr;
   border: none;
+  max-height: calc(100vh - 55pt);
 }
 
 .tab-buttons {
@@ -157,6 +160,7 @@
   text-align: left;
   color: white;
   background-color: #222;
+  min-width: 190pt;
 }
 
 .MD-param-group {
@@ -288,11 +292,11 @@
 }
 
 input:checked + .slider {
-  background-color: #2196F3;
+  background-color: #002db3;
 }
 
 input:focus + .slider {
-  box-shadow: 0 0 1pt #2196F3;
+  box-shadow: 0 0 1pt #002db3;
 }
 
 input:checked + .slider:before {
@@ -348,6 +352,7 @@ input:checked + .slider:before {
   grid-auto-rows: 150pt;
   overflow-y: scroll;
   min-height: 150pt;
+  min-width: 150pt;
 }
 
 .molecule-picker-content {
