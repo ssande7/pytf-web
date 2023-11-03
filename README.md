@@ -2,6 +2,10 @@
 
 An educational tool for thin film deposition molecular dynamics simulations.
 
+
+https://github.com/ssande7/pytf-web/assets/1731652/48cca024-ddbc-465a-b31e-6fa428e727c4
+
+
 Simulations run in [GROMACS](www.gromacs.org) via [PyThinFilm](github.com/ATB-UQ/PyThinFilm).
 
 2D molecule structures rendered with [smilesDrawer](github.com/reymond-group/smilesDrawer).
