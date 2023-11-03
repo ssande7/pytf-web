@@ -37,6 +37,7 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
   const [height_map, setHeightMap] = useState<Float32Array | null>(null);
   const [show_height_map, setShowHeightMap] = useState(true);
   const [new_roughness, setNewRoughness] = useState(false);
+  // const [fallback_seg_request, setFallbackSegRequest] = useState<number | null>(null);
 
   const [current_tab, setCurrentTab] = useState(0);
 
@@ -65,7 +66,7 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
     if (last_message === null) return;
     setLastMessage(null);
     if (!running) {
-      // console.log("Unexpected message while not running");
+      console.log("Unexpected message while not running");
       return;
     }
     if (last_message.data instanceof Blob) {
@@ -104,25 +105,8 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
         // console.log("Particles now contains ", particles.length, " frames.");
         setLastFrame((last_frame) => last_frame + num_frames);
         setParticles(particles);
+        setWaitForSegment(false);
         setNextSegment(segment_id + 1);
-        if (segment_id < latest_segment && socket.current) {
-          // console.log("Done processing. Requesting next segment: ", segment_id + 1);
-
-          // Wait 0.25s before requesting more frames to avoid laggy rendering from
-          // constant refreshes of `particles`
-          setTimeout(() => {
-            socket.current?.send((segment_id + 1).toString());
-            // console.log("Requested segment ", segment_id+1);
-          }, 250);
-        } else {
-          setWaitForSegment(false);
-          if (sim_done) {
-            setRunning(false);
-            setRoughnessReady(true);
-            setParticlesRoughness(particles[particles.length-1]);
-            setCurrentTab(1);
-          }
-        }
       }).catch(console.error);
 
     } else if (last_message.data.startsWith("new_frames")) {
@@ -131,20 +115,21 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
       if (num_segments !== packet.f) { setNumSegments(packet.f); }
       if (latest_segment === packet.f) { setSimDone(true); }
       setLatestSegment((prev) => latest_segment > prev ? latest_segment : prev);
-      setWaitForSegment((waiting) => {
-        if (!waiting && latest_segment >= next_segment && socket.current) {
-          // console.log("Requesting segment ", next_segment);
-          socket.current.send(next_segment.toString());
-          return true
-        } else {
-          // console.log("Already waiting, skipping request for ", next_segment)
-        }
-        return waiting
-      })
+      // setWaitForSegment((waiting) => {
+      //   if (!waiting && latest_segment >= next_segment && socket.current) {
+      //     console.log("Requesting segment ", next_segment);
+      //     socket.current.send(next_segment.toString());
+      //     return true
+      //   } else {
+      //     console.log("Already waiting, skipping request for ", next_segment)
+      //   }
+      //   return waiting
+      // })
+      // setFallbackSegRequest(next_segment)
 
     } else if (last_message.data.startsWith("no_seg")) {
       const seg = Number.parseInt(last_message.data.slice(6));
-      // console.log("Segment not available yet: ", seg);
+      console.log("Segment not available yet: ", seg);
       setWaitForSegment((waiting) => seg === next_segment ? false : waiting);
 
     } else if (last_message.data === "cancel") {
@@ -169,6 +154,39 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
       next_segment, setNextSegment,
       particles, sim_done,
     ]);
+
+  // up to a new segment, or a new segment is available, so request it.
+  useEffect(() => {
+    if (!running || !socket.current) { return }
+    if (!wait_for_segment && next_segment <= latest_segment) {
+      console.log("Queueing request for next segment: ", next_segment);
+      // Wait 0.25s before requesting more frames to avoid laggy rendering from
+      // constant refreshes of `particles` when downloading quickly
+      setTimeout(() => {
+        socket.current?.send(next_segment.toString());
+        console.log("Requested segment ", next_segment);
+      }, 250);
+      setWaitForSegment(true);
+    } else if (next_segment > latest_segment) {
+      setWaitForSegment(false);
+      if (sim_done) {
+        setRunning(false);
+        setParticlesRoughness(particles[particles.length-1]);
+        setRoughnessReady(true);
+        setCurrentTab(1);
+      }
+    }
+  }, [next_segment, latest_segment, sim_done, setWaitForSegment, setRoughnessReady, particles])
+
+  // useEffect(() => {
+  //   if (fallback_seg_request !== next_segment) { return }
+  //   console.log("Setting fallback timer for segment ", next_segment);
+  //   const timer = setTimeout(() => {
+  //     console.log("Sending fallback request for segment ", fallback_seg_request);
+  //     socket.current?.send(fallback_seg_request.toString());
+  //   }, 10000);
+  //   return () => clearTimeout(timer);
+  // }, [fallback_seg_request, next_segment])
 
   const [status_text, setStatusText] = useState("Idle");
   useEffect(() => {
