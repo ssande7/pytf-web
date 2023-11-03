@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React from 'react';
 import { PytfConfig } from './types';
 import '../App.css';
 
@@ -16,6 +16,12 @@ interface ISubmitButton {
 const SubmitButton: React.FC<ISubmitButton> =
   ({socket, socket_connected, config, running, setRunning, waiting, setWaiting, resetTrajectory}: ISubmitButton) =>
 {
+  let sum = 0;
+  for (let i = 0; i < config.mixture.length; i++) {
+    sum += config.mixture[i].ratio;
+  }
+  const all_zero = sum === 0;
+
   const submitComposition = async () => {
     // Do nothing without web socket connection
     if (!socket.current) return;
@@ -33,7 +39,7 @@ const SubmitButton: React.FC<ISubmitButton> =
   }
   return (<button
     className={"submit-button" + (running ? " cancel" : "")}
-    disabled={waiting || !socket_connected }
+    disabled={waiting || all_zero || !socket_connected }
     onClick={submitComposition}
   ><b>{running ? "Cancel" : "Submit"}</b></button>);
 }

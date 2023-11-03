@@ -1,6 +1,5 @@
 import { Particles } from 'omovi';
 import React, { useEffect, useState } from 'react';
-import CollapseIndicator from './CollapseIndicator';
 import MolList from './MolList';
 import SubmitButton from './SubmitButton';
 import { MixtureComponentDetailed, MixtureComponentWith3D, PytfConfig } from './types';
