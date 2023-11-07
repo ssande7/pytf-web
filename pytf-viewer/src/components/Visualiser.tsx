@@ -155,9 +155,8 @@ const Visualiser: React.FC<IVisualiser> = ({
       })
       atom_types.map((atom, idx) => new_vis.setRadius(idx, atom.radius/10.));
       new_vis.materials.particles.shininess = 50
-      // new_vis.ambientLight.color = new Color(0x596164);
-      // new_vis.ambientLight.intensity = 0.5
-      new_vis.pointLight.intensity = 0.7
+      new_vis.ambientLight.intensity = 0.5;
+      new_vis.pointLight.intensity = 0.7;
       new_vis.scene.background = new Color(0x606160);
       new_vis.setCameraPosition(camPositionInit);
       new_vis.setCameraTarget(camTargetInit);

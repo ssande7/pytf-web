@@ -217,7 +217,8 @@ const MoleculeView: React.FC<IMoleculeView> = ({mol, close_fn}) => {
       })
       atom_types.map((atom, idx) => new_mol3d.setRadius(idx, atom.radius/10.));
       new_mol3d.materials.particles.shininess = 50;
-      new_mol3d.pointLight.intensity = 0.7
+      new_mol3d.ambientLight.intensity = 0.5;
+      new_mol3d.pointLight.intensity = 0.7;
       new_mol3d.scene.background = new Color(0x606160);
       setMol3D(new_mol3d);
       setLoadingMol3D(false);
