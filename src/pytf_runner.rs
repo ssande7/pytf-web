@@ -140,10 +140,10 @@ impl PytfPauseFiles {
         std::fs::create_dir_all(format!("{}/{}", workdir, PytfFile::Log))?;
         std::fs::create_dir_all(format!("{}/{}", workdir, PytfFile::FinalCoords))?;
         std::fs::create_dir_all(format!("{}/{}", workdir, PytfFile::InputCoords))?;
-        File::options().write(true).create(true)
+        File::options().write(true).create(true).truncate(true)
             .open(PytfFile::Log.path(workdir, jobname, self.segment_id))?
             .write(&self.log.as_bytes())?;
-        File::options().write(true).create(true)
+        File::options().write(true).create(true).truncate(true)
             .open(PytfFile::FinalCoords.path(workdir, jobname, self.segment_id))?
             .write(&self.coords.as_bytes())?;
         // Input coordinates file of this run just needs to exist
