@@ -1,6 +1,11 @@
 import { Particles, Visualizer, AtomTypes } from 'omovi'
-import { Vector3, Color, Mesh, BufferGeometry, BufferAttribute, MeshBasicMaterial, Line, LineBasicMaterial, PerspectiveCamera } from 'three'
-import React, { useEffect, useState, useRef } from 'react';
+import {
+  Vector3, Color, Mesh, BufferGeometry,
+  BufferAttribute, MeshBasicMaterial,
+  Line, LineBasicMaterial, PerspectiveCamera,
+  SpriteMaterial, Sprite, Texture, Object3D,
+} from 'three'
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import RepeatIcon from '@mui/icons-material/Repeat';
 import RepeatOnIcon from '@mui/icons-material/RepeatOn';
 import SpeedIcon from '@mui/icons-material/Speed';
@@ -83,6 +88,32 @@ function dec_places(n: number) {
   let idx = n_str.indexOf('.');
   if (idx < 0) { return 0; }
   return n_str.length - idx - 1;
+}
+
+function text_sprite(text: string) {
+  let dummy = document.createElement('canvas');
+  let measure = dummy.getContext('2d')!;
+  measure.font = '64px Helvetica';
+  const size = measure.measureText(text);
+  let canvas = document.createElement('canvas');
+  canvas.width = Math.pow(2, Math.ceil(Math.log2(size.width)));
+  canvas.height = 96;
+  let ctx = canvas.getContext('2d')!;
+  ctx.font = measure.font;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'white';
+  ctx.fillText(text, canvas.width/2, canvas.height*3/4);
+  let tex = new Texture(canvas);
+  tex.needsUpdate = true;
+  let sprite_mat = new SpriteMaterial({
+    map: tex,
+    transparent: true,
+    depthWrite: false, // Needed to prevent background getting darkened in some viewing angles
+  });
+  let sprite = new Sprite(sprite_mat);
+  sprite.scale.set(canvas.width * 0.4 / canvas.height, 0.4, 1);
+  dummy.remove();
+  return sprite
 }
 
 interface IVisualiser {
@@ -272,19 +303,23 @@ const Visualiser: React.FC<IVisualiser> = ({
   }, [frame])
 
   // Draw rulers
-  const [rulerObj, setRulerObj] = useState<Array<Line>>([]);
-  const rulerObjRef = useRef(rulerObj)
-  useEffect(() => {
-    rulerObjRef.current = rulerObj;
-  }, [rulerObj])
-  const prevRulerObj = rulerObjRef.current;
+  const lx_text = useMemo(() => {
+    return text_sprite(Lx.toString() + ' nm');
+  }, [Lx]);
+  const lz_text = useMemo(() => {
+    return text_sprite(Lz.toString() + ' nm');
+  }, [Lz]);
+  const [rulerObj, setRulerObj] = useState<Object3D | null>(null);
 
   useEffect(() => {
     if (!vis) { return }
     if (!rulers || particles.length === 0) {
-      setRulerObj([]);
+      if (rulerObj) {
+        vis.scene.remove(rulerObj);
+      }
+      setRulerObj(null);
 
-    } else {
+    } else if (!rulerObj){
       let pos = particles[0].getPosition(0);
       let xlo = pos.x, zlo = pos.z, xhi = pos.x, zhi = pos.z, ylo = pos.y;
       for (let i = 1; i < particles[0].count; i++) {
@@ -297,6 +332,9 @@ const Visualiser: React.FC<IVisualiser> = ({
       }
       const off_x = (Lx - (xhi - xlo)) / 2;
       const off_z = (Lz - (zhi - zlo)) / 2;
+
+      lx_text.position.set(xhi + off_x, ylo - 0.35, zlo - 1);
+      lz_text.position.set(xlo - 1, ylo - 0.35, zhi + off_z);
 
       const points_x = [];
       points_x.push( new Vector3(xlo - off_x, ylo - 0.15, zlo - 0.65) );
@@ -323,29 +361,15 @@ const Visualiser: React.FC<IVisualiser> = ({
       const geom_x = new BufferGeometry().setFromPoints(points_x);
       const geom_z = new BufferGeometry().setFromPoints(points_z);
       const material = new LineBasicMaterial({ color: 0xffffff });
-      setRulerObj([
-        new Line(geom_x, material),
-        new Line(geom_z, material)
-      ]);
+      let ruler = new Object3D();
+      ruler.add(new Line(geom_x, material));
+      ruler.add(new Line(geom_z, material));
+      ruler.add(lx_text);
+      ruler.add(lz_text);
+      setRulerObj(ruler);
+      vis.scene.add(ruler);
     }
-
   }, [rulers, particles, particles.length, vis])
-
-  useEffect(() => {
-    if (!vis) { return }
-    if (rulerObj !== prevRulerObj) {
-      if (prevRulerObj) {
-        for (let i = 0; i < prevRulerObj.length; i++) {
-          vis.scene.remove(prevRulerObj[i]);
-        }
-      }
-      if (rulerObj) {
-        for (let i = 0; i < rulerObj.length; i++) {
-          vis.scene.add(rulerObj[i]);
-        }
-      }
-    }
-  }, [vis, rulerObj])
 
   return (<>
     <div className="MD-vis" >
