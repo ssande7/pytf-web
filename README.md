@@ -6,11 +6,11 @@ An educational tool for thin film deposition molecular dynamics simulations.
 https://github.com/ssande7/pytf-web/assets/1731652/48cca024-ddbc-465a-b31e-6fa428e727c4
 
 
-Simulations run in [GROMACS](www.gromacs.org) via [PyThinFilm](github.com/ATB-UQ/PyThinFilm).
+Simulations run in [GROMACS](https://www.gromacs.org) via [PyThinFilm](https://github.com/ATB-UQ/PyThinFilm).
 
-2D molecule structures rendered with [smilesDrawer](github.com/reymond-group/smilesDrawer).
+2D molecule structures rendered with [smilesDrawer](https://github.com/reymond-group/smilesDrawer).
 
-3D structures rendered with [Omovi](github.com/andeplane/omovi).
+3D structures rendered with [Omovi](https://github.com/andeplane/omovi).
 
 ---
 
@@ -68,7 +68,7 @@ jobs are also cached and archived when possible, and can be resumed upon
 resubmission of the same configuration.
 
 The default molecular dynamics force field is the Automated Topology Builder
-([ATB](atb.uq.edu.au)) force field, although in principle any
+([ATB](https://atb.uq.edu.au)) force field, although in principle any
 GROMACS-compatible force field can be used. With the default force field,
 molecule options for deposition can be added by adding the corresponding .pdb
 and .itp files (sourced from the ATB) to the `resources/molecules` directory,
@@ -83,7 +83,7 @@ For display of the 2D structure, the required SMILES string in
 from various other sources.
 See the default molecules provided in this repository for examples.
 
-The [PyThinFilm configuration](atb-uq.github.io/PyThinFilm) can be modified by
+The [PyThinFilm configuration](https://atb-uq.github.io/PyThinFilm) can be modified by
 editing [`base_config.yml`](resources/base_config.yml). Note that some options
 are filled by the web server and are therefore deliberately omitted. Greater
 configurability may be added in future.
