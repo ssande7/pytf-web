@@ -210,7 +210,13 @@ pub struct MixtureComponent {
     res_name: String,
     pdb_file: Option<String>,
     itp_file: Option<String>,
+    #[serde(deserialize_with = "deserialize_usize")]
     ratio: usize
+}
+
+fn deserialize_usize<'de, D: serde::Deserializer<'de>>(d: D) -> Result<usize, D::Error> {
+    let num = f64::deserialize(d)?;
+    Ok(f64::trunc(num) as usize)
 }
 
 impl MixtureComponent {
