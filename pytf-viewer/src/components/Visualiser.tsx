@@ -129,6 +129,9 @@ interface IVisualiser {
   status_text: string,
 }
 
+const camPositionInit = new Vector3( -2.4,  3, -2.7);
+const camTargetInit   = new Vector3( 2,  1.2,  2);
+
 const Visualiser: React.FC<IVisualiser> = ({
   particles, num_frames, height_map, show_height_map,
   num_bins, roughness, mean_height, new_roughness,
@@ -137,8 +140,6 @@ const Visualiser: React.FC<IVisualiser> = ({
   const [vis, setVis] = useState<Visualizer | null>(null);
   const [loadingVis, setLoadingVis] = useState(false);
   const domElement = useRef<HTMLDivElement | null>(null);
-  const camPositionInit = new Vector3( -2.4,  3, -2.7);
-  const camTargetInit   = new Vector3( 2,  1.2,  2);
   const [frame, setFrame] = useState(0);
   const [paused, setPaused] = useState(false);
   const [loop, setLoop] = useState(false);
@@ -274,7 +275,7 @@ const Visualiser: React.FC<IVisualiser> = ({
       frameRef.current = final_frame;
       setFrame(final_frame);
     }
-  }, [new_roughness, setNewRoughness]);
+  }, [new_roughness, setNewRoughness, particles.length]);
 
   // Timer to update the frame
   useEffect(() => {
@@ -368,7 +369,7 @@ const Visualiser: React.FC<IVisualiser> = ({
       setRulerObj(ruler);
       vis.scene.add(ruler);
     }
-  }, [rulers, particles, particles.length, vis])
+  }, [rulers, particles, particles.length, vis, lx_text, lz_text])
 
   return (<>
     <div className="MD-vis" >

@@ -38,6 +38,7 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
   const [show_height_map, setShowHeightMap] = useState(true);
   const [new_roughness, setNewRoughness] = useState(false);
   // const [fallback_seg_request, setFallbackSegRequest] = useState<number | null>(null);
+  const RETRY_DELAY = 10000; // ms == 10 s
 
   const [current_tab, setCurrentTab] = useState(0);
 
@@ -143,6 +144,7 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
       latest_segment, setLatestSegment,
       setLastFrame, setParticles,
       next_segment, setNextSegment,
+      num_segments, setNumSegments,
       particles, sim_done,
     ]);
 
@@ -153,11 +155,11 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
       // console.log("Queueing request for next segment: ", next_segment);
       // Wait 0.25s before requesting more frames to avoid laggy rendering from
       // constant refreshes of `particles` when downloading quickly
+      setWaitForSegment(true);
       setTimeout(() => {
         socket.current?.send(next_segment.toString());
         console.log("Requested segment ", next_segment);
       }, 250);
-      setWaitForSegment(true);
     } else if (next_segment > latest_segment) {
       setWaitForSegment(false);
       if (sim_done) {
@@ -168,8 +170,20 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
       }
     }
   }, [next_segment, latest_segment, sim_done, socket,
-      running, setWaitForSegment, setRoughnessReady, setRunning,
+      running, wait_for_segment, setWaitForSegment,
+      setRoughnessReady, setRunning,
       setParticlesRoughness, setCurrentTab, particles])
+
+  // Retry request for next segment in case something de-synced.
+  // Probably a better way to handle this...
+  useEffect(() => {
+    if (!running || !socket.current || !wait_for_segment) { return }
+    const retry = setInterval(() => {
+      socket.current?.send(next_segment.toString());
+      console.log("Retrying segment ", next_segment);
+    }, RETRY_DELAY)
+    return () => clearInterval(retry);
+  }, [socket, next_segment, running, wait_for_segment])
 
   const [status_text, setStatusText] = useState("Idle");
   useEffect(() => {
@@ -184,7 +198,7 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
         if (latest_segment < num_segments) {
           setStatusText("Running step " + (latest_segment + 1) + " of " + num_segments);
         } else {
-          setStatusText("Complete (downloading trajectory)");
+          setStatusText("Complete (downloading step " + next_segment + " of " + num_segments + ")");
         }
       } else {
         setStatusText("In Queue");
@@ -194,7 +208,7 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
     } else {
       setStatusText("Idle");
     }
-  }, [submit_waiting, failed, running, latest_segment, num_segments, roughness_ready, socket_connected]);
+  }, [submit_waiting, failed, running, next_segment, latest_segment, num_segments, roughness_ready, socket_connected]);
 
   const tabs = [
     {
