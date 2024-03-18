@@ -6,14 +6,28 @@ import Composition from './Composition';
 import Visualiser from './Visualiser';
 import { Help } from './Help';
 import Analysis from './Analysis';
+import LightModeIcon from '@mui/icons-material/LightMode';
+import DarkModeIcon from '@mui/icons-material/DarkMode';
 
+export function toggleDarkMode() {
+  const style = getComputedStyle(document.body);
+  ['--col-bg', '--col-frame', '--col-frame-hover',
+    '--col-frame-content', '--col-tab-disabled',
+    '--col-icon-hover', '--col-fg', '--col-add-button',
+  ].forEach((col) => {
+    const c = parseInt(style.getPropertyValue(col).slice(1), 16);
+    document.documentElement.style.setProperty(col, '#' + (0xfff - c).toString(16));
+  })
+}
 
 interface IDeposition {
   token: string;
   setToken: React.Dispatch<React.SetStateAction<string | null>>;
+  dark_mode: boolean;
+  setDarkMode:  React.Dispatch<React.SetStateAction<boolean>>;
 }
 
-const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
+const Deposition: React.FC<IDeposition> = ({ token, setToken, dark_mode, setDarkMode }) => {
   const [running, setRunning] = useState(false);
   const [failed, setFailed] = useState(false);
   const socket = useRef<WebSocket | null>(null);
@@ -268,12 +282,21 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken }) => {
           <div className="header-button-container">
             <div className="header-button"
                 onClick={() => {
+                  toggleDarkMode();
+                  setDarkMode((d) => !d);
+                }}
+                title="Toggle dark/light mode"
+            >
+              {dark_mode ? <LightModeIcon/> : <DarkModeIcon/>}
+            </div>
+            <div className="header-button"
+                onClick={() => {
                   logout({ token });
                   setToken(null);
                 }}
-              >
-                Sign Out ({JSON.parse(token).token})
-              </div>
+            >
+              Sign Out ({JSON.parse(token).token})
+            </div>
           </div>
         </div>
         <div className="view-container">

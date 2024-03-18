@@ -461,7 +461,7 @@ const Visualiser: React.FC<IVisualiser> = ({
         </button>*/}
       </div>
     </div>
-    <div style={{color: 'white'}}>
+    <div style={{color: 'var(--col-fg)'}}>
       <b>Status: </b>{status_text}
     </div>
   </>);

@@ -23,20 +23,21 @@ const Login: React.FC<ILogin> = ({ setToken }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     async function login(credentials: any) {
-        return fetch("/login", {
-          method: "post",
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(credentials)
-        }).then(data => {
-          if (data.ok) {
-            setLoginFailed(false);
-            return data.json();
-          }
-          setLoginFailed(true);
-          return null
-        });
+      setLoginFailed(false);
+      return fetch("/login", {
+        method: "post",
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(credentials)
+      }).then(data => {
+        if (data.ok) {
+          setLoginFailed(false);
+          return data.json();
+        }
+        setLoginFailed(true);
+        return null
+      });
     }
 
     e.preventDefault();
@@ -66,7 +67,7 @@ const Login: React.FC<ILogin> = ({ setToken }) => {
               type="password"
               onChange={e => setPassword(e.target.value)}
             />
-            <button className="submit-button roughness" type="submit">Sign in</button>
+            <button className="submit-button login" type="submit" color="var(--col-smiles-bg)">Sign in</button>
           </form>
           <div className="login-fail" style={{display: loginFailed ? 'flex' : 'none'}}>
             Incorrect username or password!

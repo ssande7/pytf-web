@@ -59,7 +59,7 @@ const MolList: React.FC<IMolList> =
             config.mixture.length === molecules.length ?
               composition.map((i) => {
                 return (
-                  <div className="molecule-tile" style={{background: '#eee', color: 'black', position: 'relative'}}>
+                  <div className="molecule-tile" style={{background: 'var(--col-smiles-bg)', color: 'var(--col-smiles-fg)', position: 'relative'}}>
                     <button
                       title="Remove"
                       className="icon-button inverted header corner-button hover-red"
@@ -141,7 +141,7 @@ const MolList: React.FC<IMolList> =
                 : (
                   <div
                     className="molecule-tile molecule-tile-clickable"
-                    style={{background: '#eee', color: 'black', position: 'relative'}}
+                    style={{background: 'var(--col-smiles-bg)', color: 'var(--col-smiles-fg)', position: 'relative'}}
                     onClick={() => {
                       setPickMol(false);
                       update_ratio(i, 1);

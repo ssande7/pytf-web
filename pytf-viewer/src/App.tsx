@@ -1,10 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import './App.css';
-import Deposition from './components/Deposition';
+import Deposition, { toggleDarkMode } from './components/Deposition';
 import Login from './components/Login';
 
 const App: React.FC = () => {
   const [token, setToken] = useState<string | null>(null);
+  const [dark_mode, setDarkMode] = useState(true);
+  useEffect(() => {
+    const wants_dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (wants_dark !== dark_mode) {
+      toggleDarkMode();
+      setDarkMode(wants_dark);
+    }
+  }, [])
 
   // Fetch token from server in case we're already logged in
   // TODO: The login page displays briefly while this runs.
@@ -29,7 +37,7 @@ const App: React.FC = () => {
   if (!token) {
     return (<Login setToken={setToken} />);
   }
-  return (<Deposition token={token} setToken={setToken}/>);
+  return (<Deposition token={token} setToken={setToken} dark_mode={dark_mode} setDarkMode={setDarkMode}/>);
 }
 
 export default App;
