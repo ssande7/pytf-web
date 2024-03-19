@@ -300,7 +300,7 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken, dark_mode, setDark
           </div>
         </div>
         <div className="view-container">
-          <div className="tab-container">
+          <div className="tab-container" id="tab-container">
             <div className="tab-buttons">
               { tabs.map((tab, i) => { return (
                 <button className={"tab-button" +
@@ -320,6 +320,24 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken, dark_mode, setDark
               </div>
               })
             }
+          </div>
+          <div className="MD-vis-resize"
+            onMouseDown={(e) => {
+              const params = document.getElementById("tab-container");
+              if (!params) { return };
+              const drag_save = {e: e, old_width: params.offsetWidth};
+              document.onmousemove = (e) => {
+                const delta = e.clientX - drag_save.e.clientX;
+                params.style.width = Math.min(
+                  Math.max(drag_save.old_width + delta, 0),
+                  document.documentElement.offsetWidth * 0.5
+                ).toString() + "px";
+              }
+              document.onmouseup = () => {
+                document.onmousemove = document.onmouseup = null;
+              }
+            }}
+          >
           </div>
           <div className="vis-container">
             <Visualiser

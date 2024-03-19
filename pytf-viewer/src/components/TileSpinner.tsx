@@ -27,7 +27,7 @@ const TileSpinner: React.FC<ITileSpinner> = ({disabled, ratio, updateRatio}) => 
         type="text"
         inputMode="numeric"
         style={{
-          fontSize: '12pt',
+          fontSize: '11pt',
           textAlign: 'center',
         }}
         min={1} size={4}

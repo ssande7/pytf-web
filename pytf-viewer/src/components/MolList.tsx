@@ -84,7 +84,7 @@ const MolList: React.FC<IMolList> =
                     <div style={{
                         marginLeft: 'auto', marginRight: 'auto',
                         marginTop: 'auto', marginBottom: 'auto',
-                        width: '90pt', height: '90pt',
+                        width: '80pt', height: '80pt',
                         cursor: 'pointer',
                       }}
                       onClick={() => {
@@ -133,7 +133,7 @@ const MolList: React.FC<IMolList> =
           </div>
         </div>
         <div className="molecule-tile-grid"
-          style={{gridAutoRows: '130pt'}}
+          style={{gridAutoRows: '120pt'}}
         >
           { config.mixture.length === molecules.length ?
             config.mixture.map((mol, i) => {
@@ -162,7 +162,7 @@ const MolList: React.FC<IMolList> =
                     <div style={{
                       marginLeft: 'auto', marginRight: 'auto',
                       marginTop: 'auto', marginBottom: 'auto',
-                      width: '80pt', height: '90pt',
+                      width: '70pt', height: '80pt',
                     }}>
                       <SmilesImg smiles={molecules[i].smiles}
                         options={{width: '100%', height: '100%'}}
