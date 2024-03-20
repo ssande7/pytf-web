@@ -375,7 +375,7 @@ const Visualiser: React.FC<IVisualiser> = ({
     <div className="MD-vis" >
       <div
         style={{
-          height: '75vh', minHeight: '200pt', maxHeight: '50vw',
+          height: '75vh', minHeight: '250px', maxHeight: '50vw',
           backgroundColor: '0x333', position: 'relative',
         }}
         ref={domElement}
@@ -384,7 +384,7 @@ const Visualiser: React.FC<IVisualiser> = ({
           color: 'white', userSelect: 'none',
           WebkitUserSelect: 'none', msUserSelect: 'none',
           zIndex: 10, position: 'absolute',
-          bottom: '3pt', left: '7pt', fontFamily: 'monospace'
+          bottom: '3px', left: '7px', fontFamily: 'monospace'
         }}>
           {vis === null ? '' : (frameRef.current * PS_PER_FRAME).toFixed(TIME_DEC_PLACES) + ' ps'}
         </div>
@@ -396,7 +396,7 @@ const Visualiser: React.FC<IVisualiser> = ({
           />
         </div>
         <input type="range" min="0" max={particles.length > 0 ? particles.length-1 : 0} defaultValue='0' ref={animationSlider}
-          style={{flexGrow: 8, marginRight: '12pt'}}
+          style={{flexGrow: 8, marginRight: '12px'}}
           onInput={(e) => {
             setSeeking(true);
             const new_frame = e.currentTarget.valueAsNumber
@@ -413,12 +413,12 @@ const Visualiser: React.FC<IVisualiser> = ({
         </button>
         <div title="Playback speed"
           className="icon-button display-only"
-          style={{marginLeft: '10pt', marginRight: '2pt'}}
+          style={{marginLeft: '10px', marginRight: '2px'}}
         >
           <SpeedIcon/>
         </div>
         <input type="range" min={5} max={30}
-          style={{flexGrow: 4, maxWidth: '10%', marginRight: '12pt'}}
+          style={{flexGrow: 4, maxWidth: '10%', marginRight: '12px'}}
           defaultValue={fps}
           onChange={(e) => {
             if (e.target.value) {
@@ -428,21 +428,21 @@ const Visualiser: React.FC<IVisualiser> = ({
         />
         <button className={ rulers ? "icon-button-toggled" : "icon-button"}
           title="Toggle rulers"
-          style={{paddingLeft: '2pt', paddingRight: '2pt'}}
+          style={{paddingLeft: '2px', paddingRight: '2px'}}
           onClick={() => setRulers((prev) => !prev)}
         >
           <StraightenIcon/>
         </button>
         <button className="icon-button"
           title="Reset camera to initial position"
-          style={{marginLeft: '6pt'}}
+          style={{marginLeft: '6px'}}
           onClick={resetCamera}
         >
           <VisibilityOutlinedIcon/>
         </button>
         {/*<button className="icon-button"
           title="Save a screenshot"
-          style={{marginLeft: '6pt'}}
+          style={{marginLeft: '6px'}}
           onClick={() => {
             if (!vis) { return }
             const vis_size = vis.renderer.getSize();

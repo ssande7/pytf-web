@@ -37,12 +37,12 @@
   background: var(--col-frame);
   margin: 0;
   padding: 0;
-  margin-bottom: 1pt;
+  margin-bottom: 1px;
   overflow: hidden;
 }
 
 .header-text {
-  padding: 10pt;
+  padding: 10px;
   font-size: 19pt;
   margin-right: auto;
   display: flex;
@@ -58,7 +58,7 @@
 }
 
 .header-button {
-  padding: 10pt;
+  padding: 10px;
   font-size: 10pt;
   cursor: pointer;
   display: flex;
@@ -71,8 +71,10 @@
 }
 
 .view-container {
-  display: grid;
-  grid-template-columns: 0fr 8pt 1fr;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  /* grid-template-columns: 0fr 8px 1fr; */
   background-color: var(--col-bg);
   gap: 0;
   flex-grow: 1;
@@ -84,10 +86,11 @@
   display: grid;
   grid-template-columns: 9em 1fr;
   border: none;
+  height: 100%;
   max-height: 100%;
-  max-width: 50vw;
-  min-width: 300pt;
-  width: 450pt;
+  max-width: calc(100vw - 8px);
+  min-width: 350px;
+  width: 510px;
 }
 
 .tab-buttons {
@@ -95,20 +98,20 @@
   flex-grow: 0;
   grid-template-columns: 1fr;
   grid-auto-rows: min-content;
-  row-gap: 1pt;
-  padding-left: 5pt;
+  row-gap: 1px;
+  padding-left: 5px;
   overflow-x: hidden;
   background-color: var(--col-bg);
   border-right-color: var(--col-frame);
   border-right-style: solid;
-  border-right-width: 6pt;
+  border-right-width: 6px;
 }
 
 .tab-button {
   margin: 0;
-  margin-left: 9pt;
-  font-size: 11pt;
-  padding: 9pt;
+  margin-left: 9px;
+  font-size: 12pt;
+  padding: 9px;
   background-color: var(--col-frame-content);
   color: var(--col-fg);
   cursor: pointer;
@@ -147,14 +150,14 @@
   align-items: stretch;
   justify-content: top;
   background-color: var(--col-bg);
-  margin-bottom: 9pt;
+  margin-bottom: 9px;
 }
 
 .MD-vis {
   display: flex;
-  padding: 7pt;
+  padding: 7px;
   margin: 0;
-  margin-top: 9pt;
+  margin-top: 9px;
   flex-direction: column;
   align-items: stretch;
   justify-content: top;
@@ -164,17 +167,27 @@
 .MD-vis-resize {
   cursor: ew-resize;
   background: transparent;
-  width: 5pt;
+  width: 8px;
+  max-width: 8px;
+  min-width: 8px;
   height: 100%;
   -moz-user-select: none;
   -ms-user-select: none;
   user-select: none;
 }
 
+.resize-container {
+  display: flex;
+  flex-direction: row;
+  width: 518px;
+  min-width: 358px;
+  max-width: 100%;
+}
+
 .MD-params {
   flex-grow: 1;
   overflow-y: auto;
-  padding: 9pt;
+  padding: 9px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -182,7 +195,7 @@
   text-align: left;
   color: var(--col-fg);
   background-color: var(--col-bg);
-  min-width: 175pt;
+  min-width: 175px;
 }
 
 .MD-param-group {
@@ -202,8 +215,8 @@
   align-content: center;
   align-items: center;
   padding: 0;
-  margin: 9pt;
-  margin-bottom: 2pt;
+  margin: 9px;
+  margin-bottom: 2px;
 }
 
 /* based on: https://css-tricks.com/making-pure-css-playpause-button/ */
@@ -214,8 +227,8 @@
   vertical-align: middle;
   cursor: pointer;
 
-  width: 16pt;
-  height: 16pt;
+  width: 16px;
+  height: 16px;
 
   border-color: transparent transparent transparent var(--col-fg);
   transition: 100ms all ease;
@@ -223,12 +236,12 @@
 
 .play-button.play {
   border-style: solid;
-  border-width: 8pt 0 8pt 12.8pt;
+  border-width: 8px 0 8px 12.8px;
 }
 
 .play-button.pause {
   border-style: double;
-  border-width: 0 0 0 12.8pt;
+  border-width: 0 0 0 12.8px;
 }
 
 .play-button:hover {
@@ -242,8 +255,8 @@
 
 .submit-button {
   margin: 0;
-  padding: 9pt;
-  margin-top: 9pt;
+  padding: 9px;
+  margin-top: 9px;
   font-size: 13pt;
   border: none;
   background-color: #009933;
@@ -287,8 +300,8 @@
 .toggle-slider {
   position: relative;
   display: inline-block;
-  width: 26pt;
-  height: 12pt;
+  width: 30px;
+  height: 16px;
 }
 
 /* Hide default HTML checkbox */
@@ -307,7 +320,7 @@
   right: 0;
   bottom: 0;
   background-color: #ccc;
-  border-radius: 12pt;
+  border-radius: 16px;
   -webkit-transition: .2s;
   transition: .2s;
 }
@@ -315,10 +328,10 @@
 .slider:before {
   position: absolute;
   content: "";
-  height: 8pt;
-  width: 8pt;
-  left: 3pt;
-  bottom: 2pt;
+  height: 12px;
+  width: 12px;
+  left: 3px;
+  bottom: 2px;
   background-color: var(--col-smiles-bg);
   border-radius: 50%;
   -webkit-transition: .2s;
@@ -330,26 +343,26 @@ input:checked + .slider {
 }
 
 input:focus + .slider {
-  box-shadow: 0 0 1pt #04c;
+  box-shadow: 0 0 1px #04c;
 }
 
 input:checked + .slider:before {
-  -webkit-transform: translateX(12pt);
-  -ms-transform: translateX(12pt);
-  transform: translateX(12pt);
+  -webkit-transform: translateX(12px);
+  -ms-transform: translateX(12px);
+  transform: translateX(12px);
 }
 
 .molecule-tile {
   background: var(--col-smiles-bg);
   color: var(--col-smiles-fg);
-  height: 140pt;
+  height: 160px;
   text-align: center;
   display: block;
-  box-shadow: 0 4px 6px 0 rgba(0,0,0,0.2);
+  box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
 }
 
 .molecule-tile-clickable {
-  height: 120pt;
+  height: 140px;
   cursor: pointer;
 }
 .molecule-tile-clickable:hover {
@@ -363,20 +376,20 @@ input:checked + .slider:before {
   border-color: var(--col-add-button);
   border-radius: 0;
   cursor: pointer;
-  height: 140pt;
+  height: 160px;
   text-align: center;
   font-size: 24pt;
 }
 
 .molecule-tile-grid {
-  padding: 8pt;
+  padding: 8px;
   display: grid;
-  gap: 8pt;
-  grid-template-columns: repeat( auto-fill, minmax(120pt, 1fr));
-  grid-auto-rows: 140pt;
+  gap: 8px;
+  grid-template-columns: repeat( auto-fill, minmax(140px, 1fr));
+  grid-auto-rows: 160px;
   overflow-y: scroll;
-  min-height: 140pt;
-  min-width: 140pt;
+  min-height: 180px;
+  min-width: 160px;
 }
 
 .molecule-picker-content {
@@ -404,10 +417,10 @@ input:checked + .slider:before {
   background-color: var(--col-frame);
   color: var(--col-fg);
   cursor: pointer;
-  padding: 9pt;
+  padding: 9px;
   text-align: left;
   outline: none;
-  font-size: 13pt;
+  font-size: 14pt;
   display: flex;
   flex-direction: row;
   align-items: stretch;
@@ -477,7 +490,7 @@ input:checked + .slider:before {
   align-items: center;
   justify-content: center;
   transition: 100ms all ease;
-  border-radius: 3pt;
+  border-radius: 3px;
 }
 .icon-button-toggled:hover {
   background: var(--col-icon-hover);
@@ -490,7 +503,7 @@ input:checked + .slider:before {
 }
 
 .corner-button {
-  margin: 4pt;
+  margin: 4px;
 }
 
 .hover-red:not([disabled]):hover {
@@ -505,8 +518,8 @@ input:checked + .slider:before {
   flex-direction: column;
   align-items: stretch;
   justify-items: flex-start;
-  padding: 9pt;
-  margin-bottom: 9pt;
+  padding: 9px;
+  margin-bottom: 9px;
   overflow-x: hidden;
   overflow-y: auto;
   background-color: var(--col-frame-content);
@@ -571,7 +584,7 @@ input:checked + .slider:before {
 }
 
 .login-form {
-  padding: 15pt;
+  padding: 15px;
   background-color: var(--col-frame);
   color: var(--col-fg);
   display: flex;
@@ -581,12 +594,12 @@ input:checked + .slider:before {
 
 .login-form input {
   font-size: 11pt;
-  padding: 5pt;
+  padding: 5px;
 }
 
 .login-fail {
-  padding: 15pt;
-  margin-top: 10pt;
+  padding: 15px;
+  margin-top: 10px;
   color: var(--col-fg);
   font-size: 13pt;
   display: flex;

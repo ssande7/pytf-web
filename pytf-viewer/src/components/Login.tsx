@@ -56,7 +56,7 @@ const Login: React.FC<ILogin> = ({ setToken }) => {
               fontSize: '25pt',
               verticalAlign: 'center',
               margin: '0',
-              marginBottom: '20pt',
+              marginBottom: '20px',
               textAlign: 'center',
             }}>Vacuum Deposition</b>
             <input placeholder="Username" type="text"

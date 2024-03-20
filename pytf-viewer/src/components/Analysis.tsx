@@ -81,7 +81,7 @@ const Roughness: React.FC<IRoughness> = ({
         }
       />
       <br/>
-      <div className="flex-row" style={{marginTop: '10pt'}}>
+      <div className="flex-row" style={{marginTop: '10pt', alignItems: 'center'}}>
         <div style={{marginRight: 'auto'}}>Show height map:</div>
         <label className="toggle-slider">
           <input type="checkbox" defaultChecked={true}

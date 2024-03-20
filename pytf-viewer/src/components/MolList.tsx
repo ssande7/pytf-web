@@ -52,7 +52,7 @@ const MolList: React.FC<IMolList> =
         <b>Composition</b>
       </div>
       <div className="collapsible-content"
-        style={{ maxHeight: '370pt', }}
+        style={{ maxHeight: '420px', }}
       >
         <div className="molecule-tile-grid">
           {
@@ -63,7 +63,7 @@ const MolList: React.FC<IMolList> =
                     <button
                       title="Remove"
                       className="icon-button inverted header corner-button hover-red"
-                      style={{position: 'absolute', top: '3pt', right: '3pt', zIndex: 2}}
+                      style={{position: 'absolute', top: '3px', right: '3px', zIndex: 2}}
                       disabled={running}
                       onClick={() => {
                         update_ratio(i, 0);
@@ -74,7 +74,7 @@ const MolList: React.FC<IMolList> =
                     </button>
                     <button
                       className="icon-button inverted header corner-button hover-blue"
-                      style={{position: 'absolute', top: '3pt', left: '3pt', zIndex: 2}}
+                      style={{position: 'absolute', top: '3px', left: '3px', zIndex: 2}}
                       onClick={() => {
                         setShowMolecule2d(molecules[i]);
                       }}
@@ -84,7 +84,7 @@ const MolList: React.FC<IMolList> =
                     <div style={{
                         marginLeft: 'auto', marginRight: 'auto',
                         marginTop: 'auto', marginBottom: 'auto',
-                        width: '80pt', height: '80pt',
+                        width: '90px', height: '90px',
                         cursor: 'pointer',
                       }}
                       onClick={() => {
@@ -133,7 +133,7 @@ const MolList: React.FC<IMolList> =
           </div>
         </div>
         <div className="molecule-tile-grid"
-          style={{gridAutoRows: '120pt'}}
+          style={{gridAutoRows: '140px'}}
         >
           { config.mixture.length === molecules.length ?
             config.mixture.map((mol, i) => {
@@ -151,7 +151,7 @@ const MolList: React.FC<IMolList> =
                   >
                     <button
                       className="icon-button inverted header corner-button hover-blue"
-                      style={{position: 'absolute', top: '3pt', left: '3pt', zIndex: 2}}
+                      style={{position: 'absolute', top: '3px', left: '3px', zIndex: 2}}
                       onClick={(e) => {
                         setShowMolecule2d(molecules[i]);
                         e.stopPropagation();
@@ -162,7 +162,7 @@ const MolList: React.FC<IMolList> =
                     <div style={{
                       marginLeft: 'auto', marginRight: 'auto',
                       marginTop: 'auto', marginBottom: 'auto',
-                      width: '70pt', height: '80pt',
+                      width: '90px', height: '90px',
                     }}>
                       <SmilesImg smiles={molecules[i].smiles}
                         options={{width: '100%', height: '100%'}}
@@ -253,7 +253,7 @@ const MoleculeView: React.FC<IMoleculeView> = ({mol, close_fn}) => {
         <div className="collapsible no-hover"
             onClick={close_fn}
         >
-          <Info style={{marginRight: '5pt'}}/><b>{mol?.name} - {mol ? format_formula(mol.formula, '10pt') : null}</b>
+          <Info style={{marginRight: '5px'}}/><b>{mol?.name} - {mol ? format_formula(mol.formula, '10pt') : null}</b>
           <div className="icon-button header">
             <CloseIcon/>
           </div>
