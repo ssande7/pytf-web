@@ -345,8 +345,7 @@ input:checked + .slider:before {
   height: 140pt;
   text-align: center;
   display: block;
-  /* border-style: none; */
-  /* border-radius: 0; */
+  box-shadow: 0 4px 6px 0 rgba(0,0,0,0.2);
 }
 
 .molecule-tile-clickable {
