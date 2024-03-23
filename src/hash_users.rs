@@ -18,6 +18,10 @@ OPTIONS:
 
   -o                <out_file>  File to output to. Default is in-place (same as <file>)
 
+  -u/--user         <username> <pwd>
+                                Additional user/password combinations to add.
+                                Can be specified multiple times.
+
   -h                            Show this message.
 ";
 
@@ -28,6 +32,7 @@ fn main() -> Result<()>{
     let mut generate = 0usize;
     let mut student_pass: Option<String> = None;
     let mut worker_pass: Option<String> = None;
+    let mut other_users: Vec<(String, String)> = vec![];
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "-h" | "--help" => {
@@ -79,6 +84,19 @@ fn main() -> Result<()>{
                     );
                 }
             }
+            "-u" | "--user" => {
+                let username = args.next();
+                let pass = args.next();
+                match (username, pass) {
+                    (Some(username), Some(pass)) => {
+                        other_users.push((username, pass));
+                    }
+                    _ => return Err(
+                        Error::new(ErrorKind::InvalidInput.into(),
+                        "ERROR: Missing username or password after -u/--user")
+                    )
+                };
+            }
             arg => {
                 if in_file.is_some() {
                     return Err(
@@ -91,15 +109,15 @@ fn main() -> Result<()>{
         }
     }
 
-    let Some(in_file) = in_file else {
-        return Err(
-            Error::new(ErrorKind::InvalidData.into(),
-            "Missing argument for users file")
-        );
-    };
     let out_file = match out_file {
         Some(fname) => fname,
-        None => in_file.clone()
+        None => match &in_file {
+            Some(fname) => fname.clone(),
+            None => return Err(
+                Error::new(ErrorKind::InvalidData.into(),
+                "Missing argument for output users file")
+            ),
+        }
     };
 
     let mut hasher = HashWriter::new(
@@ -125,9 +143,10 @@ fn main() -> Result<()>{
             hasher.write_user("worker", &worker_key)?;
             println!("{worker_key}");
         }
-    } else {
+        println!("Generated {generate} users.");
+    } else if let Some(in_file) = in_file {
         let mut idx = 0;
-        let in_data = std::fs::read_to_string(in_file)?;
+        let in_data = std::fs::read_to_string(&in_file)?;
         hasher.hash_from_stream(
             in_data.lines().filter_map(|line| {
                 idx += 1;
@@ -139,8 +158,14 @@ fn main() -> Result<()>{
                 Some(data)
             })
         )?;
-        println!("Hashed passwords for {idx} users.");
+        println!("Hashed passwords for {idx} users from {in_file}.");
     };
+    if other_users.len() > 0 {
+        for (user, pass) in &other_users {
+            hasher.write_user(&user, &pass)?;
+        }
+        println!("Created {} additional users.", other_users.len());
+    }
     hasher.flush()?;
     Ok(())
 }
