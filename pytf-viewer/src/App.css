@@ -14,6 +14,7 @@
   /* Unaffected by light/dark */
   --col-smiles-bg: #eee;
   --col-smiles-fg: #111;
+  background-color: var(--col-bg);
 }
 
 .App {
@@ -22,8 +23,10 @@
   align-items: stretch;
   justify-items: flex-start;
   background-color: var(--col-bg);
-  height: 100vh;
-  width: 100vw;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  width: 100%;
   font-size: 11pt;
 }
 
@@ -158,6 +161,7 @@
   padding: 7px;
   margin: 0;
   margin-top: 9px;
+  margin-right: 9px;
   flex-direction: column;
   align-items: stretch;
   justify-content: top;

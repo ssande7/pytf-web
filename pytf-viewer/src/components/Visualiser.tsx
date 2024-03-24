@@ -375,7 +375,7 @@ const Visualiser: React.FC<IVisualiser> = ({
     <div className="MD-vis" >
       <div
         style={{
-          height: '75vh', minHeight: '250px', maxHeight: '50vw',
+          height: '75vh', minHeight: '250px',
           backgroundColor: '0x333', position: 'relative',
         }}
         ref={domElement}
