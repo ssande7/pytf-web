@@ -29,7 +29,7 @@ const Login: React.FC<ILogin> = ({ setToken }) => {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(credentials)
+        body: JSON.stringify({username: credentials.username, password: credentials.password})
       }).then(data => {
         if (data.ok) {
           setLoginFailed(false);
@@ -68,6 +68,7 @@ const Login: React.FC<ILogin> = ({ setToken }) => {
               onChange={e => setPassword(e.target.value)}
             />
             <button className="submit-button login" type="submit" color="var(--col-smiles-bg)">Sign in</button>
+            <input type="hidden" name="login" value="login"/>
           </form>
           <div className="login-fail" style={{display: loginFailed ? 'flex' : 'none'}}>
             Incorrect username or password!
