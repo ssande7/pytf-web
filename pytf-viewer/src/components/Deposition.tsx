@@ -69,7 +69,7 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken, dark_mode, setDark
       // console.log("socket closed");
       setSocketConnected(false)
     };
-    socket.current.onmessage = (e) => setLastMessage(e);
+    socket.current.onmessage = (e) => {setLastMessage(e); return false;}
     const current = socket.current;
     return () => {
       current.close();
