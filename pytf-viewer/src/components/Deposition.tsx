@@ -51,12 +51,24 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken, dark_mode, setDark
   const [height_map, setHeightMap] = useState<Float32Array | null>(null);
   const [show_height_map, setShowHeightMap] = useState(true);
   const [new_roughness, setNewRoughness] = useState(false);
-  // const [fallback_seg_request, setFallbackSegRequest] = useState<number | null>(null);
-  const RETRY_DELAY = 10000; // ms == 10 s
+  const [try_reconnect, setTryReconnect] = useState(false); // State doesn't matter, just flipped every disconnect
+  const RECONNECT_DELAY = 5000; // ms == 5 s - delay before trying to re-open websocket
+  const RETRY_DELAY = 10000; // ms == 10 s - delay between retrying trajectory segments
 
   const [current_tab, setCurrentTab] = useState(0);
 
   useEffect(() => {
+    const timer = setInterval(() => {
+      if (socket.current?.readyState === WebSocket.CLOSED) {
+        console.log("Queing reconnect attempt.");
+        setTryReconnect((v) => !v);
+      }
+    }, RECONNECT_DELAY);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (socket.current && socket.current.readyState !== WebSocket.CLOSED) { return }
     let ws_url = window.location.href.replace(new RegExp("^http"), "ws");
     if (!ws_url.endsWith("/")) {
       ws_url += "/"
@@ -74,7 +86,7 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken, dark_mode, setDark
     return () => {
       current.close();
     }
-  }, []);
+  }, [try_reconnect, setTryReconnect]);
 
   // Process web socket messages
   useEffect(() => {
