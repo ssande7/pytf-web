@@ -75,11 +75,10 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken, dark_mode, setDark
     }
 
     socket.current = new WebSocket(ws_url + "socket");
-    // console.log("Socket opened.");
     socket.current.onopen = () => setSocketConnected(true);
     socket.current.onclose = () => {
-      // console.log("socket closed");
       setSocketConnected(false)
+      setRunning(false);
     };
     socket.current.onmessage = (e) => {setLastMessage(e); return false;}
     const current = socket.current;
