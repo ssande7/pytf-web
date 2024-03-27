@@ -12,6 +12,7 @@ import SpeedIcon from '@mui/icons-material/Speed';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import StraightenIcon from '@mui/icons-material/Straighten';
+import { interpolateViridis } from 'd3';
 
 // Box size in nm, from graphene substrate .pdb file, accounting for rotation mapping x,y,z -> y,z,x.
 // TODO: have the server send this info
@@ -42,42 +43,12 @@ export const atom_types = [
   ];
 
 function heatMapColor(value: number){
-  var h = (1.0 - value) * 240. / 360
-  return hsl2Color(h, 1, 0.5);
+  const col_str: string = interpolateViridis(value);
+  const r = parseInt(col_str.slice(1,3), 16);
+  const g = parseInt(col_str.slice(3,5), 16);
+  const b = parseInt(col_str.slice(5,7), 16);
+  return new Color(r/255., g/255., b/255.);
 }
-
-function hue2rgb(p: number, q: number, t: number) {
-    if (t < 0) {
-        t += 1;
-    } else if (t > 1) {
-        t -= 1;
-    }
-
-    if (t >= 0.66) {
-        return p;
-    } else if (t >= 0.5) {
-        return p + (q - p) * (0.66 - t) * 6;
-    } else if (t >= 0.33) {
-        return q;
-    } else {
-        return p + (q - p) * 6 * t;
-    }
-};
-
-function hsl2Color (h: number, s: number, l: number) {
-    var r, g, b, q: number, p: number;
-    if (s === 0) {
-        r = g = b = l;
-    } else {
-        q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-        p = 2 * l - q;
-        r = hue2rgb(p, q, h + 0.33);
-        g = hue2rgb(p, q, h);
-        b = hue2rgb(p, q, h - 0.33);
-    }
-
-    return new Color(r, g, b); // (x << 0) = Math.floor(x)
-};
 
 function dec_places(n: number) {
   let n_str = n.toString();
@@ -155,7 +126,12 @@ const Visualiser: React.FC<IVisualiser> = ({
         initialColors: atom_types.map((atom) => atom.color),
       })
       atom_types.map((atom, idx) => new_vis.setRadius(idx, atom.radius/10.));
-      new_vis.materials.particles.shininess = 50
+      // Set colourblind-friendly colours for common atoms
+      new_vis.setColor(6,  {r: 0x56, g: 0xB4, b: 0xE9}); // N
+      new_vis.setColor(7,  {r: 0xD5, g: 0x5E, b: 0x00}); // O
+      new_vis.setColor(15, {r: 0xF0, g: 0xE4, b: 0x42}); // S
+      new_vis.setColor(16, {r: 0x00, g: 0x9E, b: 0x73}); // Cl
+      new_vis.materials.particles.shininess = 50;
       new_vis.ambientLight.intensity = 0.5;
       new_vis.pointLight.intensity = 0.7;
       new_vis.scene.background = new Color(0x606160);

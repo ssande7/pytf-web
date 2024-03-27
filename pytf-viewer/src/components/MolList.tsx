@@ -215,6 +215,11 @@ const MoleculeView: React.FC<IMoleculeView> = ({mol, close_fn}) => {
         domElement: molecule_3d_element.current,
         initialColors: atom_types.map((atom) => atom.color),
       })
+      // Set colourblind-friendly colours for common atoms
+      new_mol3d.setColor(6,  {r: 0x56, g: 0xB4, b: 0xE9}); // N
+      new_mol3d.setColor(7,  {r: 0xD5, g: 0x5E, b: 0x00}); // O
+      new_mol3d.setColor(15, {r: 0xF0, g: 0xE4, b: 0x42}); // S
+      new_mol3d.setColor(16, {r: 0x00, g: 0x9E, b: 0x73}); // Cl
       atom_types.map((atom, idx) => new_mol3d.setRadius(idx, atom.radius/10.));
       new_mol3d.materials.particles.shininess = 50;
       new_mol3d.ambientLight.intensity = 0.5;

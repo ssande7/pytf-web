@@ -263,13 +263,13 @@
   margin-top: 9px;
   font-size: 13pt;
   border: none;
-  background-color: #009933;
+  background-color: #009e73;
   color: var(--col-fg);
   cursor: pointer;
   align-self: stretch;
 }
 .submit-button:not([disabled]):hover {
-  background-color: #00b33c;
+  background-color: #00bb88;
 }
 .submit-button:disabled {
   background-color: var(--col-frame-content);
@@ -277,27 +277,27 @@
 }
 
 .cancel {
-  background-color: #992600;
+  background-color: #d55e00;
 }
 .cancel:not([disabled]):hover {
-  background-color: #b32d00;
+  background-color: #e66500;
 }
 
 .roughness {
-  background-color: #002699;
+  background-color: #0072b2;
   color: var(--col-smiles-bg);
 }
 .roughness:not([disabled]):hover {
-  background-color: #002db3;
+  background-color: #008edd;
   color: var(--col-smiles-bg);
 }
 
 .login {
-  background-color: #002699;
+  background-color: #0072b2;
   color: var(--col-smiles-bg);
 }
 .login:not([disabled]):hover {
-  background-color: #002db3;
+  background-color: #008edd;
   color: var(--col-smiles-bg);
 }
 
