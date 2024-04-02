@@ -277,9 +277,14 @@ impl Handler<AssignJobs> for JobServer {
 }
 
 pub enum AcceptedJob {
+    /// Creating a new job
     New,
+    /// Attaching to an existing job
     Existing(Job),
+    /// Attaching to a finished job
     Finished(Job),
+    /// Job exists, but has failed
+    Failed,
 }
 
 impl Handler<ClientReqJob> for JobServer {
@@ -293,20 +298,23 @@ impl Handler<ClientReqJob> for JobServer {
         let existing = self.job_lookup.get(&jobname).and_then(|j| Some(j.clone()));
         if let Some(job) = existing {
             // Attach client to job.
-            let finished = {
-                let mut job_lock = job.write().unwrap();
-                log::info!("Job with name {} already exists.", job_lock.config.name);
+            let mut job_lock = job.write().unwrap();
+            log::info!("Job with name {} already exists.", job_lock.config.name);
 
-                // If client wasn't already attached to that job, remove them from their old job
-                if !job_lock.clients.contains(&msg.client_addr) {
-                    job_lock.clients.push(msg.client_addr.clone());
-                }
-                job_lock.status == JobStatus::Finished
-            };
-            if finished {
-                MessageResult(AcceptedJob::Finished(job))
-            } else {
-                MessageResult(AcceptedJob::Existing(job))
+            // If client wasn't already attached to that job, remove them from their old job
+            if !job_lock.clients.contains(&msg.client_addr) {
+                job_lock.clients.push(msg.client_addr.clone());
+            }
+            match job_lock.status {
+                JobStatus::Finished => {
+                    drop(job_lock);
+                    MessageResult(AcceptedJob::Finished(job))
+                },
+                JobStatus::Failed => MessageResult(AcceptedJob::Failed),
+                _ => {
+                    drop(job_lock);
+                    MessageResult(AcceptedJob::Existing(job))
+                },
             }
         } else {
             MessageResult(AcceptedJob::New)

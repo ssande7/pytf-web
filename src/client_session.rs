@@ -216,6 +216,9 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
                                 }).wait(ctx);
                                 ctx.text(MSG_JOB_QUEUED);
                             }
+                            Ok(AcceptedJob::Failed) => {
+                                ctx.text(MSG_JOB_FAILED);
+                            },
                             _ => ctx.stop(), // Something went wrong
                         }
                         fut::ready(())
@@ -292,8 +295,12 @@ impl Handler<JobFailed> for ClientWsSession {
     type Result = ();
     /// Notify client that job has failed
     fn handle(&mut self, msg: JobFailed, ctx: &mut Self::Context) -> Self::Result {
-        if let Some(job) = &self.job {
+        // Client already removed from job's list at this point, so unlink pointer
+        // to job as well.
+        if let Some(job) = self.job.take() {
             if job.read().unwrap().config.name == msg.jobname {
+                log::warn!("Sending fail message to client {} for job {}",
+                    self.id, msg.jobname);
                 ctx.text(MSG_JOB_FAILED);
             }
         }

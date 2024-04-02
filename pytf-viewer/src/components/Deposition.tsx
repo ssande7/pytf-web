@@ -217,7 +217,7 @@ const Deposition: React.FC<IDeposition> = ({ token, setToken, dark_mode, setDark
     } else if (submit_waiting) {
       setStatusText("Submitting");
     } else if (failed) {
-      setStatusText("Failed!");
+      setStatusText("Simulation failed! Try a different configuration.");
     } else if (running) {
       if (num_segments > 0) {
         if (latest_segment < num_segments) {

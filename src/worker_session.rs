@@ -339,11 +339,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WorkerWsSession {
                             _ => (),
                         }
                     } else {
-                        log::warn!("Received segment, but not assigned a job. Forwarding on for processing.");
+                        log::info!("Received segment, but not assigned a job. Forwarding on for processing.");
                         self.job_server.do_send(UnhandledTrajectorySegment{ jobname, segment_id, segment });
                     }
                 } else if bytes.starts_with(FAILED_HEADER) {
-                    log::warn!("Worker session received fail message");
                     let _ = bytes.split_to(FAILED_HEADER.len());
                     let jobname = match str::from_utf8(&bytes) {
                         Ok(jobname) => jobname,
@@ -352,10 +351,11 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WorkerWsSession {
                             return
                         }
                     };
+                    log::warn!("Worker session received fail message for job {jobname}.");
                     if self.job.as_ref().and_then(
                         |j| Some(j.read().unwrap().config.name == jobname)
                     ) != Some(true) {
-                        log::warn!("Received failed signal for a different job");
+                        log::warn!("Received failed signal for a different job! Not processing fail for {jobname}.");
                         return;
                     }
                     if let Some(job) = self.job.take() {
