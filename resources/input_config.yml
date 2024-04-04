@@ -1,0 +1,70 @@
+#####################################################
+# Literals - passed directly through to full config #
+#####################################################
+
+# Distance above film surface to insert new molecules
+insert_distance: 2.0 #nm
+
+# Number of molecules to insert each deposition step
+insertions_per_run: 4
+
+# Number of simulation cycles (deposition steps) to run.
+# The final cycle will not have any molecules deposited to
+# allow removal of any molecules that evaporated in the
+# previous cycle (needed for roughness calculation).
+# A default value will be chosen if n_cycles is omitted.
+n_cycles: 36
+
+# Random seed for simulations.
+# Alternatively, could be made user-configurable as below
+# (bounded by limits of 64 bit integer).
+seed: 489327835
+# seed:
+#   default: 489327835
+#   max: 9223372036854775807
+#   min: -9223372036854775808
+#   dec_places: 0
+#   display_name: 'Random Seed'
+#   force_number_box: true
+
+# Simulation temperature
+# Note - GROMACS will complain about temperatures below
+# ~85 K with current settings, but this can be changed.
+temperature: 300
+# temperature:
+#   default: 300.0
+#   min: 85
+#   dec_places: 1
+#   increment: 0.5
+#   display_units: 'K'
+#   display_name: 'Temperature'
+
+
+
+################################################
+# User input - displayed in "Protocol" section #
+################################################
+
+# Target value for initial molecule velocities
+# towards substrate when first inserted
+deposition_velocity:
+  default: 0.35
+  dec_places: 2
+  min: 0.1
+  max: 1
+  display_units: 'nm/ps'
+  display_name: 'Deposition velocity'
+
+
+
+#########################################################################
+# Computed values - evaluated using other values in this file based on  #
+# evalexpr rules (https://docs.rs/evalexpr/latest/evalexpr/).           #
+# Cannot depend on other computed values, but can depend on user input. #
+#########################################################################
+
+# Run time of each deposition step (ps)
+# Faster deposition velocities mean molecules hit the surface
+# sooner, so we don't need to wait as long between insertions.
+run_time:
+  formula: 18.0 + insert_distance / deposition_velocity

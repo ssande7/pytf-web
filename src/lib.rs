@@ -1,4 +1,5 @@
 pub mod authentication;
+pub mod input_config;
 pub mod pytf;
 pub mod pytf_config;
 pub mod pytf_runner;

@@ -1,8 +1,9 @@
 import { Particles } from 'omovi';
 import React, { useEffect, useState } from 'react';
+import InputRange from './InputRange';
 import MolList from './MolList';
 import SubmitButton from './SubmitButton';
-import { MixtureComponentDetailed, MixtureComponentWith3D, PytfConfig } from './types';
+import { InputConfig, MixtureComponentDetailed, MixtureComponentWith3D, PytfConfig } from './types';
 
 interface IComposition {
   socket: React.MutableRefObject<WebSocket | null>,
@@ -18,7 +19,8 @@ const Composition: React.FC<IComposition>
   = ({socket, socket_connected, running, setRunning, resetTrajectory, submit_waiting, setSubmitWaiting}) =>
 {
   const [molecules, setMolecules] = useState<Array<MixtureComponentWith3D>>([]);
-  const [config, setConfig] = useState<PytfConfig>({deposition_velocity: 0.35, mixture: []});
+  const [input_config, setInputConfig] = useState<Map<string, InputConfig>>(new Map([]));
+  const [config, setConfig] = useState<PytfConfig>({settings: new Map([]), mixture: []});
 
   // Get the list of available molecules on load
   useEffect(() => {
@@ -46,6 +48,37 @@ const Composition: React.FC<IComposition>
     return () => abort.abort();
   }, [setMolecules]);
 
+  // Get configuration options
+  useEffect(() => {
+    let abort = new AbortController();
+    const fetchInputConfig = async () => {
+      const cfg: Map<string, InputConfig> = new Map(Object.entries(await fetch("/input-config", abort).then(data => data.json())));
+      setConfig((config) => {
+        cfg.forEach((v, k) => {
+          config.settings.set(k, v.default);
+          if (v.display_name === null) { v.display_name = k }
+        });
+        return config;
+      })
+
+      // Display protocol settings in alphabetical order
+      const keys = Array.from(cfg.keys());
+      keys.sort((a, b) => {
+        var ia = cfg.get(a)?.display_name;
+        if (!ia) { ia = a; }
+        var ib = cfg.get(b)?.display_name;
+        if (!ib) { ib = b; }
+        if (ia < ib) { return -1; }
+        if (ia > ib) { return 1; }
+        return 0;
+      });
+      setInputConfig(cfg);
+      setProtocolKeys(keys);
+    };
+    fetchInputConfig();
+    return () => abort.abort();
+  }, [setInputConfig]);
+
   // Set up base config with everything zeroed
   useEffect(() => {
     setConfig((config) => {return {
@@ -53,6 +86,8 @@ const Composition: React.FC<IComposition>
       mixture: molecules.map((mol) => {return {res_name: mol.res_name, ratio: 0}}),
     }});
   }, [molecules, setConfig]);
+
+  const [protocol_keys, setProtocolKeys] = useState<Array<string>>([]);
 
   return (
     <div className="MD-param-group">
@@ -65,21 +100,25 @@ const Composition: React.FC<IComposition>
         <b>Protocol</b>
       </div>
       <div className="collapsible-content">
-          <div className="flex-row">
-            <div style={{marginRight: 'auto'}}>Deposition velocity:</div>
-            <div>{config.deposition_velocity} nm/ps</div>
-          </div>
-          <input type="range"
-            min={10} max={100}
-            defaultValue={config.deposition_velocity*100}
-            disabled={running}
-            onChange = {
-              (e) => setConfig({
-                ...config,
-                deposition_velocity: e.target.valueAsNumber/100.0
-              })
-            }
-          />
+        {
+          protocol_keys.map((k) => {
+            const cfg = input_config.get(k);
+            return cfg ? 
+              <>
+                <InputRange
+                  value={config.settings.get(k)}
+                  config={cfg}
+                  setConfigValue={(v: number) => setConfig((config) => {
+                    config.settings.set(k, v);
+                    return config
+                  })}
+                  disabled={running}
+                />
+                {k === protocol_keys[protocol_keys.length-1] ? null : <div className="flex-row" style={{minHeight: '10px'}}/>}
+              </>
+            : null
+          })
+        }
       </div>
       <SubmitButton
         socket={socket} socket_connected={socket_connected}

@@ -1,19 +1,15 @@
 mdp_template: deposition.mdp.epy
 simulation_type: vacuum_deposition
 forcefield_file: gromos54a7_atb.ff/forcefield.itp
-insert_distance: 2.0 #nm
 escape_tolerance: 2.0 #nm
 time_step: 0.0025 #ps
 density_fraction_cutoff: 0.05
-overhead_void_space: 12.0 # nm (TODO: maybe write this to avoid duplicating it in worker calculations?)
+overhead_void_space: 12.0 # nm
 use_gpu : False
-description: "Vacuum deposition test"
+description: "Vacuum deposition"
 nstout: 100
-insertions_per_run: 4
 insertion_xy_radius: 0.8 #nm
 insertion_z_radius: 1.0 #nm
-seed: 489327835
-temperature: 300 #K
 tau_t: 1.0 # ps
 bath_width: 100
 substrate:
@@ -21,9 +17,4 @@ substrate:
   pdb_file: resources/molecules/GRM_4nm.pdb
   itp_file: resources/molecules/GRM_4nm.itp
 # To be filled:
-# name: {name_str}
-# work_directory: work_{name_str}
-# deposition_velocity: {vel} # nm/ps (0.5 is good default)
-# n_cycles: {n_cycles} (determined based on number of atoms. 50-60 is probably good)
-# run_time: {run_time} #ps (25.0 is good default. Adjust based on deposition_velocity)
-# mixture: ...
+# name, work_directory, mixture, other settings in input_config.yml

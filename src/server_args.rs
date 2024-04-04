@@ -16,7 +16,13 @@ pub struct Connection {
 
 /// Parse command line arguments for the server to set relevant globals
 /// Returns connection details for the server and the redis server (in that order)
-pub fn parse_args() -> anyhow::Result<Option<(Connection, Connection)>> {
+#[derive(Clone, Debug)]
+pub struct ServerArgs {
+    pub address: Connection,
+    pub redis_address: Connection,
+}
+
+pub fn parse_args() -> anyhow::Result<Option<ServerArgs>> {
     let mut args = std::env::args().skip(1).peekable();
     let mut resources = None;
     let mut archive_dir = None;
@@ -110,8 +116,7 @@ pub fn parse_args() -> anyhow::Result<Option<(Connection, Connection)>> {
             UserDB::default()
         }
     });
-
-    Ok(Some((address, redis_address)))
+    Ok(Some(ServerArgs {address, redis_address}))
 }
 
 const HELP_MSG: &str = "

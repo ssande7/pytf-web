@@ -1,4 +1,4 @@
-use std::io::{Error, ErrorKind};
+use std::{io::{Error, ErrorKind}, sync::Arc};
 
 use actix::{Addr, Actor};
 use actix_cors::Cors;
@@ -20,11 +20,12 @@ mod worker_session;
 use worker_session::WorkerWsSession;
 
 mod server_args;
-use server_args::parse_args;
+use server_args::{parse_args, ServerArgs};
 
 use pytf_web::{
     authentication::{self, LoginToken, UserCredentials},
-    pytf_config::AVAILABLE_MOLECULES,
+    input_config::ConfigSettings,
+    pytf_config::{AVAILABLE_MOLECULES, RESOURCES_DIR},
     pytf_frame::WS_FRAME_SIZE_LIMIT
 };
 
@@ -92,6 +93,7 @@ async fn socket(
     user: Identity,
     stream: web::Payload,
     srv: web::Data<Addr<JobServer>>,
+    input_config: web::Data<Arc<ConfigSettings>>,
 ) -> Result<HttpResponse, actix_web::Error> {
     let Ok(uid) = user.id() else {
         return Err(Error::new(ErrorKind::InvalidData, "User session corrupted.").into())
@@ -104,7 +106,7 @@ async fn socket(
         ).frame_size(WS_FRAME_SIZE_LIMIT).start()
     } else {
         ws::WsResponseBuilder::new(
-            ClientWsSession::new(uid, srv.get_ref().clone()),
+            ClientWsSession::new(uid, srv.get_ref().clone(), input_config.get_ref().clone()),
             &req,
             stream,
         ).frame_size(WS_FRAME_SIZE_LIMIT).start()
@@ -116,11 +118,17 @@ async fn molecules(_user: Identity) -> impl Responder {
     HttpResponse::Ok().json(AVAILABLE_MOLECULES.get())
 }
 
+#[get("/input-config")]
+async fn get_input_config(_user: Identity, input_config: web::Data<Arc<ConfigSettings>>) -> impl Responder {
+    HttpResponse::Ok().json(&**input_config.get_ref())
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     env_logger::init();
 
-    let Some((server, redis)) = (match parse_args() {
+    let Some(ServerArgs { address: server, redis_address: redis}) =
+    (match parse_args() {
         Ok(addr) => addr,
         Err(e) => {
             return Err(Error::new(ErrorKind::InvalidInput,
@@ -135,6 +143,10 @@ async fn main() -> std::io::Result<()> {
         .expect("Could not connect to redis-server");
 
     let job_server = JobServer::new().start();
+    let input_config = Arc::new(
+        ConfigSettings::open(RESOURCES_DIR.get().unwrap().join("input_config.yml"))
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?
+    );
 
     HttpServer::new(move || {
         let cors = Cors::default()
@@ -151,6 +163,7 @@ async fn main() -> std::io::Result<()> {
             .max_age(3600);
         App::new()
             .app_data(web::Data::new(job_server.clone()))
+            .app_data(web::Data::new(input_config.clone()))
             .wrap(
                 IdentityMiddleware::builder()
                     .visit_deadline(Some(std::time::Duration::from_secs(24 * 60 * 60)))
@@ -172,6 +185,7 @@ async fn main() -> std::io::Result<()> {
             .service(user_token)
             .service(socket)
             .service(molecules)
+            .service(get_input_config)
             .service(Files::new("/", FRONTEND_ROOT))
     })
     .bind((server.address, server.port))?

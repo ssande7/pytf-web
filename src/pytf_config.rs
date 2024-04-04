@@ -1,9 +1,18 @@
-use std::{hash::{Hash, Hasher}, sync::OnceLock, path::{Path, PathBuf}};
-use num::integer::Integer;
+use std::{
+    hash::{Hash, Hasher},
+    sync::OnceLock,
+    path::{Path, PathBuf},
+    collections::HashMap,
+    fmt::Display,
+};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use num::integer::Integer;
 
-use crate::pdb2xyz::pdb2xyz;
+use crate::{
+    pdb2xyz::pdb2xyz,
+    input_config::{ValueRange, ConfigSettings, ConfigSettingsValue},
+};
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,14 +62,9 @@ pub static RESOURCES_DIR: OnceLock<PathBuf> = OnceLock::new();
 /// Parsed from JSON and filled with molecule 3D structure from .pdb file.
 pub static AVAILABLE_MOLECULES: OnceLock<MoleculeResources> = OnceLock::new();
 
-// TODO: Make this configurable
-pub const INSERTIONS_PER_RUN: usize = 4;
-pub const DEPOSITION_STEPS:   usize = 36;
-pub const PS_PER_FRAME: f32 = 100. * 0.0025; // nstout * dt
-// pub const TARGET_ATOMS_TOTAL: usize = 1300;
-pub const INSERT_DISTANCE:  f32 = 2f32;
-pub const RUN_TIME_MINIMUM: f32 = 18f32;
-pub const DEFAULT_DEPOSITION_VELOCITY: f32 = 0.35;
+/// Default number of deposition cycles if not specified
+pub const DEFAULT_N_CYCLES:   usize = 36;
+
 
 /// Full information about simulation to be appended
 /// to base config file.
@@ -70,14 +74,8 @@ pub struct PytfConfig {
     pub work_directory: String,
     pub n_cycles: usize,
 
-    /// Duration of each deposition step
-    #[serde(serialize_with = "serialize_f32_1dec", default)]
-    pub run_time: f32,
-
-    #[serde(serialize_with = "serialize_f32_2dec")]
-    pub deposition_velocity: f32,
-
-    pub mixture: Vec<MixtureComponent>,
+    #[serde(flatten)]
+    pub config: PytfConfigMinimal,
 }
 
 impl PytfConfig {
@@ -103,88 +101,98 @@ impl PytfConfig {
 
 /// Minimal config information sent from
 /// client to be filled into full PytfConfig
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct PytfConfigMinimal {
-    deposition_velocity: f32,
     mixture: Vec<MixtureComponent>,
+    #[serde(flatten)]
+    settings: HashMap<String, serde_json::Value>,
 }
 
-impl From<PytfConfigMinimal> for PytfConfig {
-    fn from(mut config: PytfConfigMinimal) -> Self {
-        // Remove zero ratios
-        config.mixture.retain(|v| v.ratio > 0);
-
-        // Avoid multiple versions of empty job
-        if config.mixture.is_empty() {
-            config.deposition_velocity = DEFAULT_DEPOSITION_VELOCITY;
-        }
-
+impl PytfConfigMinimal {
+    /// Sanitize settings using `base_config` to generate a full configuration
+    pub fn build(mut self, base_config: &ConfigSettings) -> PytfConfig {
         // Sort by res_name for consistent ordering
-        config.mixture.sort_by(|a, b| (&a.res_name).cmp(&b.res_name));
+        self.mixture.sort_by(|a, b| (&a.res_name).cmp(&b.res_name));
 
         // Normalise ratios and calculate atoms per step
-        let gcd = config.mixture.iter().fold(
-                config.mixture.iter().map(|v| v.ratio).max().unwrap_or(1),
+        let gcd = self.mixture.iter().fold(
+                self.mixture.iter().map(|v| v.ratio).max().unwrap_or(1),
                 |acc, v| acc.gcd(&v.ratio)
             );
-        // let mut ratio_tot = 0;
-        // let mut atoms_per_step = 0;
-        for mol in config.mixture.iter_mut() {
+        for mol in self.mixture.iter_mut() {
             mol.fill_fields();
             mol.ratio /= gcd;
-            // ratio_tot += mol.ratio;
-            // let natoms = AVAILABLE_MOLECULES.get().unwrap()
-            //     .molecules
-            //     .iter().find_map(|m| {
-            //         if m.res_name == mol.res_name {
-            //             Some(m.natoms)
-            //         } else { None }
-            //     }).unwrap_or(0);
-            // atoms_per_step += mol.ratio * natoms;
         }
-        // let atoms_per_step = if ratio_tot > 0 {
-        //     (INSERTIONS_PER_RUN * atoms_per_step) as f32 / ratio_tot as f32
-        // } else { 1f32 };
-        let n_cycles = DEPOSITION_STEPS; //(TARGET_ATOMS_TOTAL as f32 / atoms_per_step).ceil() as usize;
-        let run_time = (INSERT_DISTANCE / config.deposition_velocity) + RUN_TIME_MINIMUM;
-        // Avoid weird steps in time between trajectory frames
-        let run_time = (run_time / PS_PER_FRAME).ceil() * PS_PER_FRAME;
-        let mut name = String::with_capacity(config.mixture.len()*15+10);
-        name.push_str(&format!("{:.1}_{:.2}", run_time, config.deposition_velocity));
 
         // Mixture is normalised and sorted by canonicalize_ratios(), so names should be consistent
         // for the same config.
-        for mol in &config.mixture {
-            name.push_str(&format!("_{}-{:x}", mol.res_name, mol.ratio));
+        let mut name = String::with_capacity(self.mixture.len()*15 + self.settings.len()*10);
+        let mut first = true;
+        for mol in &self.mixture {
+            if mol.ratio == 0 { continue }
+            if first { first = false; } else { name.push_str("_"); }
+            name.push_str(&mol.res_name);
+            name.push_str("-");
+            name.push_str(&mol.ratio.to_string());
         }
-        Self {
+
+        // Get keys for independent settings variables. All others set by base_config, so either
+        // constant or derived.
+        let mut keys: Vec<String> = self.settings.keys().map(|k| k.to_owned()).collect();
+        keys.sort();
+
+        // Apply base config to settings to insert any extra properties and sanitize values
+        base_config.apply(&mut self.settings);
+        for key in keys {
+            name.push_str("_");
+            let val = &self.settings[&key];
+            if val.is_f64() {
+                if let Some(ConfigSettingsValue::FloatRange(
+                    ValueRange { dec_places: Some(d), .. }
+                )) = base_config.settings.get(key.as_str()) {
+                    format!("{:.1$}", val.as_f64().unwrap(), *d as usize);
+                }
+            }
+            name.push_str(&self.settings[&key].to_string());
+        }
+
+        // Extract number of cycles for easy future access, or set it to the default
+        // if not present
+        let n_cycles = match self.settings.remove("n_cycles").and_then(|n| n.as_u64()) {
+            Some(n) => n as usize,
+            None => DEFAULT_N_CYCLES
+        };
+
+        PytfConfig {
             name,
             work_directory: "".into(), // Placeholder work_directory to be filled by worker
             n_cycles,
-            run_time,
-            deposition_velocity: config.deposition_velocity,
-            mixture: config.mixture,
+            config: self,
         }
     }
 }
 
-impl Default for PytfConfigMinimal {
-    fn default() -> Self {
-        Self { deposition_velocity: DEFAULT_DEPOSITION_VELOCITY, mixture: Vec::new() }
+impl Display for PytfConfigMinimal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("{ mixture: { ")?;
+        let mut first = true;
+        for mol in &self.mixture {
+            if mol.ratio == 0 { continue }
+            if first {
+                first = false;
+                f.write_fmt(format_args!("{}", mol))?;
+            } else {
+                f.write_fmt(format_args!(", {}", mol))?;
+            }
+        }
+        f.write_fmt(format_args!(" }}, protocol: {:?} }}", self.settings))
     }
-}
-
-
-fn serialize_f32_1dec<S: serde::Serializer>(x: &f32, s: S) -> Result<S::Ok, S::Error> {
-    s.serialize_f32((x*10.).round()/10.)
-}
-fn serialize_f32_2dec<S: serde::Serializer>(x: &f32, s: S) -> Result<S::Ok, S::Error> {
-    s.serialize_f32((x*100.).round()/100.)
 }
 
 impl Default for PytfConfig {
     fn default() -> Self {
-        PytfConfigMinimal::default().into()
+        let config = PytfConfigMinimal::default();
+        config.build(&ConfigSettings::default())
     }
 }
 
@@ -214,6 +222,12 @@ pub struct MixtureComponent {
     ratio: usize
 }
 
+impl Display for MixtureComponent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{}: {}", self.res_name, self.ratio))
+    }
+}
+
 fn deserialize_usize<'de, D: serde::Deserializer<'de>>(d: D) -> Result<usize, D::Error> {
     let num = f64::deserialize(d)?;
     Ok(f64::trunc(num) as usize)
@@ -228,4 +242,3 @@ impl MixtureComponent {
         self.itp_file = Some(path.to_str().expect("Non UTF-8 file path!").to_owned());
     }
 }
-

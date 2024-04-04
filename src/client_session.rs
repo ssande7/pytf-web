@@ -2,7 +2,10 @@ use std::{time::{Duration, Instant}, sync::Arc};
 
 use actix::prelude::*;
 use actix_web_actors::ws;
-use pytf_web::pytf_config::{PytfConfigMinimal, PytfConfig};
+use pytf_web::{
+    pytf_config::{PytfConfigMinimal, PytfConfig},
+    input_config::ConfigSettings,
+};
 
 use crate::job_queue::{Job, JobServer, ClientConnect, ClientDisconnect, ClientReqJob, AssignJobs, JobInner, RegisterJob, AcceptedJob};
 
@@ -61,16 +64,20 @@ pub struct ClientWsSession {
     pub job: Option<Job>,
 
     pub job_server: Addr<JobServer>,
+
+    /// Config settings to be calculated/sanitized from user input + literals to be passed through.
+    input_config: Arc<ConfigSettings>,
 }
 
 impl ClientWsSession {
-    pub fn new(id: String, job_server: Addr<JobServer>) -> Self {
+    pub fn new(id: String, job_server: Addr<JobServer>, input_config: Arc<ConfigSettings>) -> Self {
         Self {
             id: Arc::new(id),
             force_disconnect: false,
             heartbeat: Instant::now(),
             job: None,
             job_server,
+            input_config,
         }
     }
 
@@ -174,13 +181,13 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
                     }
                     log::debug!("Done processing cancel for client {}", self.id);
                 } else if let Ok(config) = serde_json::from_str::<PytfConfigMinimal>(&text) {
-                    log::info!("Received job config from client {}:\n{config:?}", self.id);
+                    log::info!("Received job config from client {}: {config}", self.id);
                     if let Some(old_job) = self.job.take() {
                         let mut old_job = old_job.write().unwrap();
                         log::info!("Removing client {} from old job with name {}", self.id, old_job.config.name);
                         old_job.remove_client(&ctx.address());
                     }
-                    let config: PytfConfig = config.into();
+                    let config: PytfConfig = config.build(&self.input_config);
                     self.job_server.send(ClientReqJob {
                         config: config.clone(),
                         client_id: self.id.clone(),
@@ -226,6 +233,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
                     .wait(ctx);
                 } else if let Ok(segment_id) = text.parse::<usize>() {
                     log::debug!("Received request for segment {segment_id} from client {}: {text}", self.id);
+                    if segment_id == 0 {
+                        log::warn!("Segment id should be > 0!");
+                        return;
+                    }
                     // Client requesting data from frame with specified id
                     if let Some(job) = &self.job {
                         let job = job.read().unwrap();

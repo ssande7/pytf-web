@@ -32,7 +32,7 @@ const SubmitButton: React.FC<ISubmitButton> =
       socket.current.send("cancel");
     } else {
       // console.log("Sending config")
-      socket.current.send(JSON.stringify(config));
+      socket.current.send(JSON.stringify({mixture: config.mixture, ...Object.fromEntries(config.settings)}));
       resetTrajectory();
       setRunning(true);
     }

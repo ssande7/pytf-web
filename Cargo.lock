@@ -921,6 +921,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "evalexpr"
+version = "11.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "63b41cb9dd076076058a4523f009c900c582279536d0b2e45a29aa930e083cc5"
+
+[[package]]
 name = "fastrand"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1798,6 +1804,7 @@ dependencies = [
  "bincode",
  "ctrlc",
  "env_logger",
+ "evalexpr",
  "futures",
  "futures-util",
  "libc",

@@ -31,7 +31,28 @@ export type MixtureComponent = {
 
 // Configuration data to send to server
 export type PytfConfig = {
-  deposition_velocity: number,
+  settings: Map<string, any>,
   mixture: Array<MixtureComponent>,
+}
+
+// Configuration of an input number for protocol section with optional bounds
+export type InputConfig = {
+  // Default value to display
+  default: number,
+  // Optional minimum bound
+  min: number | null,
+  // Optional maximum bound
+  max: number | null,
+  // Number of decimal places to show/round to
+  dec_places: number | null,
+  // Increment between values (enforced during validation)
+  increment: number | null,
+  // Optional units to display
+  display_units: string | null,
+  // Name to display. Set to corresponding key if omitted.
+  display_name: string | null,
+  // Force display to use a number box instead of a slider.
+  // Only matters if min, max and dec_places are non-null.
+  force_number_box: boolean,
 }
 
