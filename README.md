@@ -85,8 +85,13 @@ See the default molecules provided in this repository for examples.
 
 The [PyThinFilm configuration](https://atb-uq.github.io/PyThinFilm) can be modified by
 editing [`base_config.yml`](resources/base_config.yml). Note that some options
-are filled by the web server and are therefore deliberately omitted. Greater
-configurability may be added in future.
+are filled by the web server and are therefore deliberately omitted.
+Omitted values (with the exceptions of `name`, `work_directory` and `mixture`) should
+appear in [`input_config.yml`](resources/input_config.yml). These can be literals,
+user-configurable fields (displayed in the Protocol section of the web page), or
+formulas to be calculated from other fields in the file. In the latter case, formulas
+follow the syntax specified by the [evalexpr](https://docs.rs/evalexpr/latest/evalexpr/)
+crate (a simple example is included in [`input_config.yml`](resources/input_config.yml)).
 
 ### Server
 By default, the server runs on port 8080, and expects to be behind something like nginx.
