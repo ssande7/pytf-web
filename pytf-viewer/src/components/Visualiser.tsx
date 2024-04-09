@@ -2,7 +2,7 @@ import { Particles, Visualizer, AtomTypes } from 'omovi'
 import {
   Vector3, Color, Mesh, BufferGeometry,
   BufferAttribute, MeshBasicMaterial,
-  Line, LineBasicMaterial, PerspectiveCamera,
+  Line, LineBasicMaterial, // PerspectiveCamera,
   SpriteMaterial, Sprite, Texture, Object3D,
 } from 'three'
 import React, { useEffect, useState, useRef, useMemo } from 'react';
@@ -10,7 +10,7 @@ import RepeatIcon from '@mui/icons-material/Repeat';
 import RepeatOnIcon from '@mui/icons-material/RepeatOn';
 import SpeedIcon from '@mui/icons-material/Speed';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
-import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
+// import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import StraightenIcon from '@mui/icons-material/Straighten';
 import { interpolateViridis } from 'd3';
 
@@ -19,6 +19,7 @@ import { interpolateViridis } from 'd3';
 export const Lz = 4.2600 // x -> z
 export const Lx = 3.9352 // y -> x
 export const PS_PER_FRAME = 0.25 // Time between animation frames
+const TIME_DEC_PLACES = dec_places(PS_PER_FRAME);
 
 // Omovi atom types in periodic table order
 // Used to retrieve Omovi atom type from element number in data
@@ -53,7 +54,7 @@ function heatMapColor(value: number){
 function dec_places(n: number) {
   let n_str = n.toString();
   if (n_str.indexOf('e-') > -1) {
-    let [_, exponent] = n_str.split('e-');
+    let [, exponent] = n_str.split('e-');
     return parseInt(exponent, 10);
   }
   let idx = n_str.indexOf('.');
@@ -115,7 +116,6 @@ const Visualiser: React.FC<IVisualiser> = ({
   const [paused, setPaused] = useState(false);
   const [loop, setLoop] = useState(false);
   const [rulers, setRulers] = useState(true);
-  const TIME_DEC_PLACES = dec_places(PS_PER_FRAME);
 
   // Viewport creation
   useEffect(() => {
@@ -251,7 +251,7 @@ const Visualiser: React.FC<IVisualiser> = ({
       frameRef.current = final_frame;
       setFrame(final_frame);
     }
-  }, [new_roughness, setNewRoughness, particles.length]);
+  }, [new_roughness, setNewRoughness, show_height_map, particles.length]);
 
   // Timer to update the frame
   useEffect(() => {
@@ -345,7 +345,7 @@ const Visualiser: React.FC<IVisualiser> = ({
       setRulerObj(ruler);
       vis.scene.add(ruler);
     }
-  }, [rulers, particles, particles.length, vis, lx_text, lz_text])
+  }, [rulers, particles, particles.length, vis, lx_text, lz_text, rulerObj, setRulerObj])
 
   return (<>
     <div className="MD-vis" >

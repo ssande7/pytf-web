@@ -195,14 +195,15 @@ interface IMoleculeView {
   close_fn: () => void,
 }
 
+const cameraInitTarget = new Vector3(0, 0, 0);
+const cameraInitPosition = new Vector3(0.7, 0.7, 0.7);
+
 const MoleculeView: React.FC<IMoleculeView> = ({mol, close_fn}) => {
   const molecule_3d_element = useRef<HTMLDivElement | null>(null);
   const [mol3d, setMol3D] = useState<Visualizer | null>(null);
   const [loading_mol3d, setLoadingMol3D] = useState(false);
   const [atoms_3d, setAtoms3D] = useState<Particles | null>();
   const prevAtomsRef = useRef<Particles | null>();
-  const cameraInitTarget = new Vector3(0, 0, 0);
-  const cameraInitPosition = new Vector3(0.7, 0.7, 0.7);
 
   useEffect(() => {
     setAtoms3D(mol?.particles)
@@ -229,7 +230,7 @@ const MoleculeView: React.FC<IMoleculeView> = ({mol, close_fn}) => {
       setLoadingMol3D(false);
     }
     return () => { if (mol3d) mol3d.dispose() }
-  }, [molecule_3d_element]);
+  }, [molecule_3d_element, loading_mol3d, mol3d]);
 
   useEffect(() => {
     prevAtomsRef.current = atoms_3d;
