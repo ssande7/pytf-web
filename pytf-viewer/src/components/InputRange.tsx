@@ -31,12 +31,12 @@ const InputRange: React.FC<IInputRange> = ({config, setConfigValue, disabled}) =
           disabled={disabled}
           value={text}
           onChange = { (e) => {
-            var filtered = e.target.value.replaceAll(RegExp('[^0-9\.]+', 'g'), '')
+            var filtered = e.target.value.replaceAll(RegExp('[^0-9.]+', 'g'), '')
             setText(filtered)
           }}
           onBlur = { (e) => {
-            var filtered = e.target.value.replaceAll(RegExp('[^0-9\.]+', 'g'), '')
-            var v = filtered ? parseInt(filtered) : config.default;
+            var filtered = e.target.value.replaceAll(RegExp('[^0-9.]+', 'g'), '')
+            var v = filtered ? parseFloat(filtered) : config.default;
             if (config.dec_places !== null) { v = Math.round(v * scale) / scale }
             if (config.min !== null && v < config.min) { v = config.min }
             if (config.max !== null && v > config.max) { v = config.max }
