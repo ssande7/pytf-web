@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import '../App.css';
@@ -10,7 +10,10 @@ interface ITileSpinner {
 }
 
 const TileSpinner: React.FC<ITileSpinner> = ({disabled, ratio, updateRatio}) => {
-  const [text, setText] = useState('1');
+  const [text, setText] = useState(ratio.toString());
+  useEffect(() => {
+    setText(ratio.toString());
+  }, [ratio])
   return (
     <div className="number-spin-container">
       <button className="icon-button inverted hover-blue"
